@@ -42,6 +42,7 @@ tmp.*
 /phandle_format
 /propname_escapes
 /references
+/region_tree
 /root_node
 /rw_tree1
 /set_name

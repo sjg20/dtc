@@ -281,6 +281,11 @@ libfdt_tests () {
     run_test dtbs_equal_ordered embedded_nul.test.dtb embedded_nul_equiv.test.dtb
 
     run_dtc_test -I dts -O dtb bad-size-cells.dts
+
+    # Tests for fdt_find_regions()
+    for flags in $(seq 0 15); do
+	run_test region_tree ${flags}
+    done
 }
 
 dtc_tests () {
