@@ -249,6 +249,11 @@ libfdt_tests () {
 
     # Specific bug tests
     run_test add_subnode_with_nops
+
+    # Tests for fdt_find_regions()
+    for flags in $(seq 0 15); do
+	run_test region_tree ${flags}
+    done
 }
 
 dtc_tests () {
