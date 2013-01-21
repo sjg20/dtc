@@ -1,0 +1,23 @@
+/dts-v1/;
+/memreserve/ 1 2;
+/ {
+	model = "MyBoardName";
+	compatible = "MyBoardName", "MyBoardFamilyName";
+	#address-cells = <2>;
+	#size-cells = <2>;
+	chosen {
+		bootargs = "root=/dev/sda2";
+		linux,platform = <0x600>;
+	};
+	holiday {
+		compatible = "ixtapa", "mexico";
+		weather = "sunny";
+		status = "okay";
+		flight@1 {
+			airline = "alaska";
+		};
+		flight@2 {
+			airline = "lan";
+		};
+	};
+};

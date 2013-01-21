@@ -21,6 +21,7 @@ FAIL_IF_SIGNAL () {
 DTC=../dtc
 DTGET=../fdtget
 DTPUT=../fdtput
+DTGREP=../fdtgrep
 
 verbose_run () {
     if [ -z "$QUIET_TEST" ]; then

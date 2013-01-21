@@ -696,3 +696,90 @@ the type options are the same as fdtget. You can use -c to create a node if
 it does not exist already, and -p to create all required nodes (like
 'mkdir -p' does with directories). Unfortunately fdtput does not support
 deleting nodes or properties.
+
+
+5) fdtgrep -- Extract portions of a Device Tree and output them
+
+Ths fdtgrep program allows you to 'grep' a Device Tree file in a structured
+way. The output of fdtgrep is either another Device Tree file or a text file,
+perhaps with some pieces omitted.
+
+This is useful in a few situations:
+
+    - Finding a node or property in a device tree and displaying it along
+      with its surrounding context. This is helpful since some files are
+      quite large.
+    - Creating a smaller device tree which omits some portions. For example
+      a full Linux kernel device tree may be cut down for use by a simple
+      boot loader (perhaps removing the pinmux information).
+
+The syntax of the fdtgrep commandline is described in the help (fdtgrep -h)
+and there are many options. Some common uses are as follows:
+
+    fdtgrep -s -n /node <DTB-file-name>
+        - Output just a node and its subnodes
+
+    fdtgrep -s -n /node -o out.dtb -O dtb <DTB-file-name>
+        - Same but output as a binary Device Tree
+
+    fdtgrep -s -N /node <DTB-file-name>
+        - Output everything except the given node
+
+    fdtgrep -a -n /compatible -n /aliases <DTB-file-name>
+        - Output compatible and alias nodes
+
+    fdtgrep -s /node -O bin <DTB-file-name> | sha1sum
+        - Take the sha1sum of just the portion of the Device Tree occupied
+          by the /node node. This could be compared with the same node from
+          another file perhaps, to see if they match.
+        - You can add -tme to produce a valid Device Tree including header,
+          memreserve table and string table.
+
+    fdtgrep -A /node <DTB-file-name>
+        - Output just a node and its subnodes
+
+    fdtgrep -f /chosen spi4 <DTB-file-name>
+        - Output nodes/properties/compatibles strings which match /chosen and
+          spi4. Add the hex offset on the left of each. Note that -g is the
+          default parameter type, so this equivalent to:
+               fdtgrep -f -g /chosen -g spi4 <DTB-file-name>
+
+    fdtgrep -a /chosen spi4 <DTB-file-name>
+        - Similar but use absolute file offset. This allows to to find nodes
+          and properties in a file with a hex dumper.
+
+    fdtgrep -a /chosen spi4 <DTB-file-name>
+        - Similar but use absolute file offset. This allows to to find nodes
+          and properties in a file with a hex dumper.
+
+    fdtgrep -A /chosen spi4 <DTB-file-name>
+        - Output everything, but colour the nodes and properties which match
+          /chosen and spi4 green, and everything else red.
+
+    fdtgrep -Ad /chosen spi4 <DTB-file-name>
+        - Similar but use + and - to indicate included and excluded lines.
+
+    fdtgrep -Adv /chosen spi4 <DTB-file-name>
+        - Invert the above (-v operates similarly to -v with standard grep)
+
+    fdtgrep -c google,cros-ec-keyb <DTB-file-name>
+        - Show the node with the given compatible string
+
+    fdtgrep -n x -p compatible <DTB-file-name>
+        - List all nodes and their compatible strings. The '-n x' drops all
+          nodes not called 'x', which his all of them. If you want to list
+          nodes without a compatible as well, then omit this.
+
+Note you can use:
+    -n/N to include/exclude nodes
+    -p/N to include/exclude properties
+    -c/C to include/exclude nodes which have a particular compatible string
+    -g/G to include/exclude any of the above (global search)
+
+    Note it is not permitted to use a positive/negative search of the same
+    type at the same time. You can do this in two steps, such as:
+
+       ./fdtgrep -n x -p compatible x -O dtb |./fdtgrep - -n /serial@12C10000
+
+    but it is hard to see why this would be useful. Unfortunately fdtgrep
+    does not support wildcard matching or regular expressions.

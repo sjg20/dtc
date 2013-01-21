@@ -112,6 +112,7 @@ BIN += dtc
 BIN += fdtdump
 BIN += fdtget
 BIN += fdtput
+BIN += fdtgrep
 
 SCRIPTS = dtdiff
 
@@ -124,6 +125,7 @@ ifneq ($(DEPTARGETS),)
 -include $(FDTDUMP_OBJS:%.o=%.d)
 -include $(FDTGET_OBJS:%.o=%.d)
 -include $(FDTPUT_OBJS:%.o=%.d)
+-include $(FDTGREP_OBJS:%.o=%.d)
 endif
 
 
@@ -188,6 +190,7 @@ fdtget:	$(FDTGET_OBJS) $(LIBFDT_archive)
 
 fdtput:	$(FDTPUT_OBJS) $(LIBFDT_archive)
 
+fdtgrep:	$(FDTGREP_OBJS) $(LIBFDT_archive)
 
 #
 # Testsuite rules
@@ -198,6 +201,7 @@ TESTS_BIN += dtc
 TESTS_BIN += convert-dtsv0
 TESTS_BIN += fdtput
 TESTS_BIN += fdtget
+TESTS_BIN += fdtgrep
 
 include tests/Makefile.tests
 
