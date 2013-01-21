@@ -22,6 +22,7 @@ DTC=../dtc
 DTGET=../fdtget
 DTPUT=../fdtput
 FDTDUMP=../fdtdump
+DTGREP=../fdtgrep
 
 verbose_run () {
     if [ -z "$QUIET_TEST" ]; then
