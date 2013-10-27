@@ -656,3 +656,41 @@ The fdtdump program prints a readable version of a flat device tree file.
 The syntax of the fdtdump command line is:
 
     fdtdump <DTB-file-name>
+
+
+3) fdtget -- Get individual properties and lists from a Device Tree
+
+Ths fdtget program allows you to extract properties from nodes, and also
+list nodes and properties.
+
+The syntax of the fdtget commandline is described in the help (fdtget -h).
+Common uses are:
+
+    fdtget -ts <DTB-file-name> /node compatible
+        - Read the compatible string of a node. The -ts is optional since
+          fdtget will normally guess the type correctly.
+
+    fdtget -bx <DTB-file-name> /node bytes
+        - Read the bytes in a property and output in hex. The 'b' prefix
+          forces byte output, since otherwise fdtget will output in 32-bit
+          or 16-bit words if the property length is so-aligned.
+
+    fdtget -p <DTB-file-name> /node
+        - List the properties in a node
+
+    fdtget -l <DTB-file-name> /
+        - List the subnodes for a node (here, the root node)
+
+You can use -d to provide a default value for when the property does not
+exist.
+
+
+4) fdtput -- Write individual properties to a Device Tree
+
+Ths fdtput program allows you to write properties to nodes.
+
+The syntax of the fdtput commandline is described in the help (fdtput -h) and
+the type options are the same as fdtget. You can use -c to create a node if
+it does not exist already, and -p to create all required nodes (like
+'mkdir -p' does with directories). Unfortunately fdtput does not support
+deleting nodes or properties.
