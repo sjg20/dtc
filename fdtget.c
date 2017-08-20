@@ -46,11 +46,72 @@ struct display_info {
 	int size;		/* data size (1/2/4) */
 	enum display_mode mode;	/* display mode that we are using */
 	const char *default_val; /* default value if node/property not found */
+
+	int decode_phandles;	/* detect, decode and show phandle values */
+	/* property which defines the number of argument cells for a phandle */
+	char *phandle_cells;
 };
 
 static void report_error(const char *where, int err)
 {
 	fprintf(stderr, "Error at '%s': %s\n", where, fdt_strerror(err));
+}
+
+/**
+ * Decodes and shows the target path of a phandle
+ *
+ * This looks up a phandle and displays the full path of the target node. If
+ * the property value does not correctly decode as a phandle according to the
+ * supported format, it returns an error.
+ *
+ * @param disp		Display information / options
+ * @param value		Phandle value to look up
+ * @param blob		Device tree blob (for looking up phandles)
+ * @return number of arguments expected, or -1 on error
+ */
+static int decode_phandle_target(struct display_info *disp, int value,
+				 const char *blob)
+{
+	const void *cells_prop;
+	int phandle_args = 0;
+	int cells_size;
+	char buf[256];
+	int target;
+	int ret;
+
+	target = fdt_node_offset_by_phandle(blob, value);
+	if (target < 0) {
+		printf("invalid_%d", value);
+		return -1;
+	}
+
+	if (disp->phandle_cells) {
+		cells_prop = fdt_getprop(blob, target, disp->phandle_cells,
+					 &cells_size);
+		if (!cells_prop) {
+			fprintf(stderr, "Expected node '%s' to have property "
+				"'%s' but it is missing\n",
+				fdt_get_name(blob, target, NULL),
+				disp->phandle_cells);
+			return -1;
+		}
+		if (cells_size != 4) {
+			fprintf(stderr, "Expected node '%s' property '%s' size "
+				"to be 4, but it is %d\n",
+				fdt_get_name(blob, target, NULL),
+				disp->phandle_cells, cells_size);
+			return -1;
+		}
+		phandle_args = fdt32_to_cpu(*(const fdt32_t *)cells_prop);
+	}
+	ret = fdt_get_path(blob, target, buf, sizeof(buf));
+	if (ret < 0) {
+		report_error("Could not get full path", ret);
+		return -1;
+	}
+	printf("%s", buf);
+
+	return phandle_args;
 }
 
 /**
@@ -60,12 +121,15 @@ static void report_error(const char *where, int err)
  * @param data		Data to display
  * @param len		Maximum length of buffer
  * @param size		Data size to use for display (e.g. 4 for 32-bit)
+ * @param blob		Device tree blob (for looking up phandles)
  * @return 0 if ok, -1 on error
  */
 static int show_cell_list(struct display_info *disp, const char *data, int len,
-			  int size)
+			  int size, const void *blob)
 {
 	const uint8_t *p = (const uint8_t *)data;
+	int phandle_start = 0; /* expecting a phandle pointer next */
+	int phandle_args = 0; /* numnber of phandle args left to process */
 	char fmt[3];
 	int value;
 	int i;
@@ -73,12 +137,33 @@ static int show_cell_list(struct display_info *disp, const char *data, int len,
 	fmt[0] = '%';
 	fmt[1] = disp->type ? disp->type : 'd';
 	fmt[2] = '\0';
+	if (disp->decode_phandles) {
+		if (size != 4) {
+			fprintf(stderr, "Decoding phandles requires an output "
+				"size of 4 bytes\n");
+			return -1;
+		}
+		phandle_start = 1;
+	}
 	for (i = 0; i < len; i += size, p += size) {
 		if (i)
 			printf(" ");
 		value = size == 4 ? fdt32_to_cpu(*(const fdt32_t *)p) :
 			size == 2 ? (*p << 8) | p[1] : *p;
-		printf(fmt, value);
+		if (phandle_start && phandle_args <= 0) {
+			phandle_args = decode_phandle_target(disp, value, blob);
+			if (phandle_args < 0)
+				return phandle_args;
+		} else {
+			printf(fmt, value);
+			if (phandle_args > 0)
+				phandle_args--;
+		}
+	}
+	if (phandle_args > 0) {
+		fprintf(stderr, "Not enough data: %d more arg(s) expected",
+			phandle_args);
+		return -1;
 	}
 
 	return 0;
@@ -93,9 +178,11 @@ static int show_cell_list(struct display_info *disp, const char *data, int len,
  * @param disp		Display information / options
  * @param data		Data to display
  * @param len		Maximum length of buffer
- * @return 0 if ok, -1 if data does not match format
+ * @param blob		Device tree blob (for looking up phandles)
+ * @return 0 if ok, -1 on error
  */
-static int show_data(struct display_info *disp, const char *data, int len)
+static int show_data(struct display_info *disp, const char *data, int len,
+		     const void *blob)
 {
 	int size;
 	const char *s;
@@ -128,7 +215,7 @@ static int show_data(struct display_info *disp, const char *data, int len)
 		return -1;
 	}
 
-	return show_cell_list(disp, data, len, size);
+	return show_cell_list(disp, data, len, size, blob);
 }
 
 /**
@@ -239,7 +326,7 @@ static int show_data_for_item(const void *blob, struct display_info *disp,
 		assert(property);
 		value = fdt_getprop(blob, node, property, &len);
 		if (value) {
-			if (show_data(disp, value, len))
+			if (show_data(disp, value, len, blob))
 				err = -1;
 			else
 				printf("\n");
@@ -308,12 +395,14 @@ static const char usage_synopsis[] =
 	"\n"
 	"Each value is printed on a new line.\n"
 	USAGE_TYPE_MSG;
-static const char usage_short_opts[] = "t:pld:" USAGE_COMMON_SHORT_OPTS;
+static const char usage_short_opts[] = "t:pld:Pc:" USAGE_COMMON_SHORT_OPTS;
 static struct option const usage_long_opts[] = {
 	{"type",              a_argument, NULL, 't'},
 	{"properties",       no_argument, NULL, 'p'},
 	{"list",             no_argument, NULL, 'l'},
 	{"default",           a_argument, NULL, 'd'},
+	{"decode-phandles",  no_argument, NULL, 'P'},
+	{"cells",             a_argument, NULL, 'c'},
 	USAGE_COMMON_LONG_OPTS,
 };
 static const char * const usage_opts_help[] = {
@@ -321,6 +410,9 @@ static const char * const usage_opts_help[] = {
 	"List properties for each node",
 	"List subnodes for each node",
 	"Default value to display when the property is missing",
+	"Decode phandles to show the target node and (with -c) args (this only "
+		"supports some common cases)",
+	"Cells property in phandle target (e.g. 'gpio' for '#gpio-cells') ",
 	USAGE_COMMON_OPTS_HELP
 };
 
@@ -357,6 +449,20 @@ int main(int argc, char *argv[])
 
 		case 'd':
 			disp.default_val = optarg;
+			break;
+
+		case 'P':
+			disp.decode_phandles = 1;
+			break;
+
+		case 'c':
+			disp.phandle_cells = malloc(strlen(optarg) +
+						    strlen("#-cells"));
+			if (!disp.phandle_cells) {
+				fprintf(stderr, "Out of memory\n");
+				return 1;
+			}
+			sprintf(disp.phandle_cells, "#%s-cells", optarg);
 			break;
 		}
 	}

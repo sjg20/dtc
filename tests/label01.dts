@@ -59,5 +59,36 @@ memrsv2: /memreserve/ 0x2000000000000000 0x0100000000000000;
 		linux,platform = <0x600>;
 	};
 
+	phandle-test {
+		first = <&target_a 10 20>;
+		both = <&target_a 30 40 &target_b 50 &target_a 60 70>;
+		third = <&target_c &target_c>;
+		all = <&target_a 30 40 &target_b 50 &target_c &target_a 60 70>;
+		too-few-args = <&target_a 80>;
+		invalid-size = [01];
+		invalid-target = <&target_d>;
+		invalid-phandle = <1000 1 2 3 4>;
+	};
+
+	target_a: target@0 {
+		reg = <0 0 0 0>;
+		#gpio-cells = <2>;
+	};
+
+	target_b: target@1 {
+		reg = <1 0 0 0>;
+		#gpio-cells = <1>;
+	};
+
+	target_c: target@2 {
+		reg = <2 0 0 0>;
+		#gpio-cells = <0>;
+	};
+
+	target_d: target@3 {
+		reg = <3 0 0 0>;
+		#gpio-cells = [01];	/* invalid cell value */
+	};
+
 };
 

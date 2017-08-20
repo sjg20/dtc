@@ -757,6 +757,25 @@ fdtget_tests () {
     run_fdtget_test "<the dead silence>" -tx \
 	-d "<the dead silence>" $dtb /randomnode doctor-who
     run_fdtget_test "<blink>" -tx -d "<blink>" $dtb /memory doctor-who
+
+    # Test decoding of phandles
+    run_fdtget_test "/target@0 10 20" -P -c "gpio" $dtb /phandle-test first
+    run_fdtget_test "/target@0 30 40 /target@1 50 /target@0 60 70" \
+	-P -c "gpio" $dtb /phandle-test both
+    run_fdtget_test "/target@2 /target@2" -P -c "gpio" $dtb /phandle-test third
+    run_fdtget_test "/target@0 30 40 /target@1 50 /target@2 /target@0 60 70" \
+	-P -c "gpio" $dtb /phandle-test all
+
+    # Without the -c parameter we cannot decode some phandles.
+    run_wrap_error_test $DTGET --decode-phandles $dtb /phandle-test first
+    run_wrap_error_test $DTGET -P $dtb /phandle-test both
+    run_wrap_error_test $DTGET -P $dtb /phandle-test all
+    run_wrap_error_test $DTGET -P -c wrong $dtb /phandle-test all
+
+    run_wrap_error_test $DTGET -P -c gpio $dtb /phandle-test too-few-args
+    run_wrap_error_test $DTGET -P -c gpio $dtb /phandle-test invalid-size
+    run_wrap_error_test $DTGET -P -c gpio $dtb /phandle-test invalid-target
+    run_wrap_error_test $DTGET -P $dtb /phandle-test invalid-phandle
 }
 
 fdtput_tests () {
