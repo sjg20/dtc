@@ -1,0 +1,43 @@
+/dts-v1/;
+
+/ {
+	compatible = "test_tree1";
+	#address-cells = <0x01>;
+	#size-cells = <0x00>;
+	prop-str = "hello world";
+	prop-int = <0xdeadbeef>;
+	prop-int64 = <0xdeadbeef 0x1abcdef>;
+
+	subnode@2 {
+		#address-cells = <0x01>;
+		linux,phandle = <0x2000>;
+		#size-cells = <0x00>;
+		reg = <0x02>;
+		prop-int = <0x75bcd15>;
+
+		subsubnode@0 {
+			compatible = "subsubnode2\0subsubnode";
+			phandle = <0x2001>;
+			reg = <0x00>;
+			prop-int = <0x75bcd15>;
+		};
+
+		ss2 {
+		};
+	};
+
+	subnode@1 {
+		compatible = "subnode1";
+		reg = <0x01>;
+		prop-int = <0xdeadbeef>;
+
+		ss1 {
+		};
+
+		subsubnode {
+			compatible = "subsubnode1\0subsubnode";
+			placeholder = "this is a placeholder string\0string2";
+			prop-int = <0xdeadbeef>;
+		};
+	};
+};
