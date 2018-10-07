@@ -140,6 +140,19 @@ check_align () {
     )
 }
 
+# $1: first file
+# $2: second file
+files_equal () {
+    shorten_echo "files_equal $@:	"
+    (
+	if diff -q $1 $2; then
+	    PASS
+	else
+	    FAIL "File $1 differs from $2"
+	fi
+    )
+}
+
 run_dtc_test () {
     printf "dtc $*:	"
     base_run_test wrap_test $VALGRIND $DTC "$@"
@@ -464,6 +477,7 @@ libfdt_tests () {
     run_dtc_test -I fs -O dts -o fs.test_tree1.test.dts $FSBASE/test_tree1
     run_dtc_test -I fs -O dtb -o fs.test_tree1.test.dtb $FSBASE/test_tree1
     run_test dtbs_equal_unordered -m fs.test_tree1.test.dtb test_tree1.dtb
+    base_run_test files_equal fs_tree1.dts fs.test_tree1.test.dts
 
     # check full tests
     for good in test_tree1.dtb; do
