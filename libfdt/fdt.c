@@ -106,6 +106,8 @@ size_t fdt_header_size_(uint32_t version)
 		return FDT_V3_SIZE;
 	else if (version <= 16)
 		return FDT_V16_SIZE;
+	else if (version <= 17)
+		return FDT_V17_SIZE;
 	else
 		return FDT_V17_SIZE;
 }

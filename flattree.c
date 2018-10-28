@@ -28,6 +28,7 @@
 #define FTF_STRTABSIZE	0x10
 #define FTF_STRUCTSIZE	0x20
 #define FTF_NOPS	0x40
+#define FTF_MINI	0x80
 
 static struct version_info {
 	int version;
@@ -45,6 +46,8 @@ static struct version_info {
 	 FTF_BOOTCPUID|FTF_STRTABSIZE|FTF_NOPS},
 	{17, 16, FDT_V17_SIZE,
 	 FTF_BOOTCPUID|FTF_STRTABSIZE|FTF_STRUCTSIZE|FTF_NOPS},
+	{18, 18, FDT_V18_SIZE,
+	 FTF_BOOTCPUID|FTF_STRTABSIZE|FTF_STRUCTSIZE|FTF_NOPS|FTF_MINI},
 };
 
 struct emitter {
@@ -55,7 +58,17 @@ struct emitter {
 	void (*beginnode)(void *, struct label *labels);
 	void (*endnode)(void *, struct label *labels);
 	void (*property)(void *, struct label *labels);
+	void (*mini_property)(void *e, struct property *prop, int nameoff);
 };
+
+struct value_node {
+	struct value_node *next;
+	struct data data;
+};
+
+int new_value, old_value;
+
+struct value_node *value_head;
 
 static void bin_emit_cell(void *e, cell_t val)
 {
@@ -112,6 +125,110 @@ static struct emitter bin_emitter = {
 	.beginnode = bin_emit_beginnode,
 	.endnode = bin_emit_endnode,
 	.property = bin_emit_property,
+};
+
+static void bin_mini_emit_cell(void *e, cell_t val)
+{
+	struct data *dtbuf = e;
+
+	*dtbuf = data_append_cell(*dtbuf, val);
+}
+
+static void bin_mini_emit_string(void *e, const char *str, int len)
+{
+	struct data *dtbuf = e;
+
+	if (len == 0)
+		len = strlen(str);
+
+	*dtbuf = data_append_data(*dtbuf, str, len);
+	*dtbuf = data_append_byte(*dtbuf, '\0');
+}
+
+static void bin_mini_emit_align(void *e, int a)
+{
+	struct data *dtbuf = e;
+
+	*dtbuf = data_append_align(*dtbuf, a);
+}
+
+static void bin_mini_emit_data(void *e, struct data d)
+{
+	struct data *dtbuf = e;
+
+	*dtbuf = data_append_data(*dtbuf, d.val, d.len);
+}
+
+static void bin_mini_emit_beginnode(void *e, struct label *labels)
+{
+	bin_emit_cell(e, FDT_BEGIN_NODE);
+}
+
+static void bin_mini_emit_endnode(void *e, struct label *labels)
+{
+	bin_emit_cell(e, FDT_END_NODE);
+}
+
+static int seen_value(struct data *data)
+{
+	struct value_node *node;
+
+	if (!value_head)
+		return 0;
+	for (node = value_head; node; node = node->next)
+		if (node->data.len == data->len &&
+		    !memcmp(node->data.val, data->val, data->len))
+			return 0;
+
+	return 0;
+}
+
+static void bin_mini_emit_property(void *e, struct property *prop, int nameoff)
+{
+	bin_emit_cell(e, FDT_PROP);
+	if (prop->val.len == 4 && fdt32_to_cpu(*(fdt32_t *)prop->val.val) < 0xff)
+		return;
+	if (!seen_value(&prop->val)) {
+		struct value_node *node;
+
+		node = xmalloc(sizeof(struct value_node));
+		node->data.len = prop->val.len;
+		node->data.val = xmalloc(prop->val.len);
+		memcpy(node->data.val, prop->val.val, prop->val.len);
+		node->next = NULL;
+		value_head = node;
+		new_value++;
+		if (prop->val.len > 4 && !(prop->val.len % 4)) {
+			struct data *dtbuf = e;
+			int single_byte = 1;
+			fdt32_t *p;
+			int i;
+
+			for (i= 0, p = (fdt32_t *)prop->val.val;
+			i < prop->val.len / 4; i++, p++) {
+				if (fdt32_to_cpu(*p) & 0xffffff00)
+					single_byte = 0;
+			}
+			if (0 && single_byte) {
+				printf("found %d\n", prop->val.len);
+				*dtbuf = data_append_data(*dtbuf, prop->val.val, prop->val.len / 4);
+				return;
+			}
+		}
+		bin_mini_emit_data(e, prop->val);
+	} else {
+		old_value++;
+	}
+}
+
+static struct emitter bin_mini_emitter = {
+	.cell = bin_mini_emit_cell,
+	.string = bin_mini_emit_string,
+	.align = bin_mini_emit_align,
+	.data = bin_mini_emit_data,
+	.beginnode = bin_mini_emit_beginnode,
+	.endnode = bin_mini_emit_endnode,
+	.mini_property = bin_mini_emit_property,
 };
 
 static void emit_label(FILE *f, const char *prefix, const char *label)
@@ -275,14 +392,22 @@ static void flatten_tree(struct node *tree, struct emitter *emit,
 
 		nameoff = stringtable_insert(strbuf, prop->name);
 
-		emit->property(etarget, prop->labels);
-		emit->cell(etarget, prop->val.len);
-		emit->cell(etarget, nameoff);
+		if (emit->property) {
+			emit->property(etarget, prop->labels);
+			emit->cell(etarget, prop->val.len);
+			emit->cell(etarget, nameoff);
 
-		if ((vi->flags & FTF_VARALIGN) && (prop->val.len >= 8))
-			emit->align(etarget, 8);
+			if ((vi->flags & FTF_VARALIGN) && (prop->val.len >= 8))
+				emit->align(etarget, 8);
+			emit->data(etarget, prop->val);
+		} else {
+			emit->mini_property(etarget, prop, nameoff);
+// 			if (prop->val.len == 4 && fdt32_to_cpu(*(fdt32_t *)prop->val.val) < 0xff)
+// 				;
+// 			else
+// 				emit->data(etarget, prop->val);
+		}
 
-		emit->data(etarget, prop->val);
 		emit->align(etarget, sizeof(cell_t));
 	}
 
@@ -375,8 +500,13 @@ void dt_to_blob(FILE *f, struct dt_info *dti, int version)
 	if (!vi)
 		die("Unknown device tree blob version %d\n", version);
 
-	flatten_tree(dti->dt, &bin_emitter, &dtbuf, &strbuf, vi);
+	if (version <= 17)
+		flatten_tree(dti->dt, &bin_emitter, &dtbuf, &strbuf, vi);
+	else
+		flatten_tree(dti->dt, &bin_mini_emitter, &dtbuf, &strbuf, vi);
 	bin_emit_cell(&dtbuf, FDT_END);
+
+	printf("old = %d, new = %d\n", old_value, new_value);
 
 	reservebuf = flatten_reserve_list(dti->reservelist, vi);
 
