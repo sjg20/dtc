@@ -60,7 +60,7 @@ static void fill_fullpaths(struct node *tree, const char *prefix)
 
 /* Usage related data. */
 static const char usage_synopsis[] = "dtc [options] <input file>";
-static const char usage_short_opts[] = "qI:O:o:V:d:R:S:p:a:fb:i:H:sW:E:@Ahv";
+static const char usage_short_opts[] = "qI:O:o:V:d:F:R:S:p:a:fb:i:H:sW:E:@Ahv";
 static struct option const usage_long_opts[] = {
 	{"quiet",            no_argument, NULL, 'q'},
 	{"in-format",         a_argument, NULL, 'I'},
@@ -68,6 +68,7 @@ static struct option const usage_long_opts[] = {
 	{"out-format",        a_argument, NULL, 'O'},
 	{"out-version",       a_argument, NULL, 'V'},
 	{"out-dependency",    a_argument, NULL, 'd'},
+	{"out-feature",       a_argument, NULL, 'F'},
 	{"reserve",           a_argument, NULL, 'R'},
 	{"space",             a_argument, NULL, 'S'},
 	{"pad",               a_argument, NULL, 'p'},
@@ -101,6 +102,7 @@ static const char * const usage_opts_help[] = {
 	 "\t\tasm - assembler source",
 	"\n\tBlob version to produce, defaults to "stringify(DEFAULT_FDT_VERSION)" (for dtb and asm output)",
 	"\n\tOutput dependency file",
+	"\n\tSelect features to enable in output (hex mask)",
 	"\n\tMake space for <number> reserve map entries (for dtb and asm output)",
 	"\n\tMake the blob at least <bytes> long (extra space)",
 	"\n\tAdd padding to the blob of <bytes> long (extra space)",
@@ -181,6 +183,7 @@ int main(int argc, char *argv[])
 	FILE *outf = NULL;
 	int outversion = DEFAULT_FDT_VERSION;
 	long long cmdline_boot_cpuid = -1;
+	int features = 0;
 
 	quiet      = 0;
 	reservenum = 0;
@@ -205,6 +208,8 @@ int main(int argc, char *argv[])
 		case 'd':
 			depname = optarg;
 			break;
+		case 'F':
+			features = strtol(optarg, NULL, 16);
 		case 'R':
 			reservenum = strtol(optarg, NULL, 0);
 			break;
@@ -362,7 +367,7 @@ int main(int argc, char *argv[])
 		dt_to_yaml(outf, dti);
 #endif
 	} else if (streq(outform, "dtb")) {
-		dt_to_blob(outf, dti, outversion);
+		dt_to_blob(outf, dti, outversion, features);
 	} else if (streq(outform, "asm")) {
 		dt_to_asm(outf, dti, outversion);
 	} else if (streq(outform, "null")) {

@@ -1,5 +1,6 @@
 #!/bin/bash
 
+FLAGS=200
 DTC=~/cosarm/dtc/dtc
 KERNEL_DIR=~/cosarm/src/third_party/kernel/v4.19
 
@@ -37,7 +38,8 @@ recomp() {
 	for f in *.dtb; do
 # 		echo $f
 		fdtdump $f >"dts/${f%.dtb}.dts"
-		if ! fdtdump $f | ${DTC} -V 18 -o $out/$f 2>/dev/null; then
+		if ! fdtdump $f | \
+			${DTC} -V 18 -F $FLAGS -o $out/$f 2>/dev/null; then
 			echo "Error on $f"
 			exit 1
 		fi
