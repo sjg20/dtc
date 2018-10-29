@@ -71,7 +71,8 @@ struct emitter {
 	void (*beginnode)(void *, struct label *labels);
 	void (*endnode)(void *, struct label *labels);
 	void (*property)(void *, struct label *labels);
-	void (*mini_property)(void *e, struct property *prop, int nameoff);
+	void (*mini_property)(void *e, struct property *prop, int nameoff,
+			      struct data *valuebuf);
 };
 
 struct value_node {
@@ -197,11 +198,16 @@ static int seen_value(struct data *data)
 	return 0;
 }
 
-static void bin_mini_emit_property(void *e, struct property *prop, int nameoff)
+static void bin_mini_emit_property(void *e, struct property *prop, int nameoff,
+				   struct data *valuebuf)
 {
 	struct value_node *node;
 
 	bin_emit_cell(e, FDT_PROP);
+	if (!(emit_flags & FTF_SINGLE_CELL_PROP)) {
+		bin_mini_emit_cell(e, prop->val.len);
+		bin_mini_emit_cell(e, nameoff);
+	}
 	if (emit_flags & FTF_INPLACE_BYTE) {
 		if (prop->val.len == 4 &&
 		    fdt32_to_cpu(*(fdt32_t *)prop->val.val) < 0xff)
@@ -213,6 +219,9 @@ static void bin_mini_emit_property(void *e, struct property *prop, int nameoff)
 			return;
 		}
 		new_value++;
+		*valuebuf = data_append_data(*valuebuf, prop->val.val,
+					     prop->val.len);
+		return;
 	}
 
 	node = xmalloc(sizeof(struct value_node));
@@ -251,7 +260,6 @@ static struct emitter bin_mini_emitter = {
 	.data = bin_mini_emit_data,
 	.beginnode = bin_mini_emit_beginnode,
 	.endnode = bin_mini_emit_endnode,
-	.property = bin_emit_property,
 	.mini_property = bin_mini_emit_property,
 };
 
@@ -390,7 +398,7 @@ static int stringtable_insert(struct data *d, const char *str)
 
 static void flatten_tree(struct node *tree, struct emitter *emit,
 			 void *etarget, struct data *strbuf,
-			 struct version_info *vi)
+			 struct data *valuebuf, struct version_info *vi)
 {
 	struct property *prop;
 	struct node *child;
@@ -417,7 +425,7 @@ static void flatten_tree(struct node *tree, struct emitter *emit,
 
 		nameoff = stringtable_insert(strbuf, prop->name);
 
-		if (!(emit_flags & FTF_SINGLE_CELL_PROP)) {
+		if (emit->property) {
 			emit->property(etarget, prop->labels);
 			emit->cell(etarget, prop->val.len);
 			emit->cell(etarget, nameoff);
@@ -426,7 +434,7 @@ static void flatten_tree(struct node *tree, struct emitter *emit,
 				emit->align(etarget, 8);
 			emit->data(etarget, prop->val);
 		} else {
-			emit->mini_property(etarget, prop, nameoff);
+			emit->mini_property(etarget, prop, nameoff, valuebuf);
 		}
 
 		emit->align(etarget, sizeof(cell_t));
@@ -445,7 +453,7 @@ static void flatten_tree(struct node *tree, struct emitter *emit,
 	}
 
 	for_each_child(tree, child) {
-		flatten_tree(child, emit, etarget, strbuf, vi);
+		flatten_tree(child, emit, etarget, strbuf, valuebuf, vi);
 	}
 
 	emit->endnode(etarget, tree->labels);
@@ -511,6 +519,7 @@ void dt_to_blob(FILE *f, struct dt_info *dti, int version, int features)
 	struct data reservebuf = empty_data;
 	struct data dtbuf      = empty_data;
 	struct data strbuf     = empty_data;
+	struct data valuebuf   = empty_data;
 	struct fdt_header fdt;
 	int padlen = 0;
 
@@ -526,10 +535,12 @@ void dt_to_blob(FILE *f, struct dt_info *dti, int version, int features)
 	vi = &local_vi;
 	vi->flags |= features;
 
+	fprintf(stderr, "features = %x\n", vi->flags);
 	if (version <= 17)
-		flatten_tree(dti->dt, &bin_emitter, &dtbuf, &strbuf, vi);
+		flatten_tree(dti->dt, &bin_emitter, &dtbuf, &strbuf, NULL, vi);
 	else
-		flatten_tree(dti->dt, &bin_mini_emitter, &dtbuf, &strbuf, vi);
+		flatten_tree(dti->dt, &bin_mini_emitter, &dtbuf, &strbuf,
+			     &valuebuf, vi);
 	bin_emit_cell(&dtbuf, FDT_END);
 
 // 	printf("old = %d, new = %d\n", old_value, new_value);
@@ -578,6 +589,8 @@ void dt_to_blob(FILE *f, struct dt_info *dti, int version, int features)
 	blob = data_append_zeroes(blob, sizeof(struct fdt_reserve_entry));
 	blob = data_merge(blob, dtbuf);
 	blob = data_merge(blob, strbuf);
+	if (version > 17)
+		blob = data_merge(blob, valuebuf);
 
 	/*
 	 * If the user asked for more space than is used, pad out the blob.
@@ -704,7 +717,7 @@ void dt_to_asm(FILE *f, struct dt_info *dti, int version)
 	fprintf(f, "\t.long\t0, 0\n\t.long\t0, 0\n");
 
 	emit_label(f, symprefix, "struct_start");
-	flatten_tree(dti->dt, &asm_emitter, f, &strbuf, vi);
+	flatten_tree(dti->dt, &asm_emitter, f, &strbuf, NULL, vi);
 
 	fprintf(f, "\t/* FDT_END */\n");
 	asm_emit_cell(f, FDT_END);

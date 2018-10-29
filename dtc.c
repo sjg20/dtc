@@ -210,6 +210,7 @@ int main(int argc, char *argv[])
 			break;
 		case 'F':
 			features = strtol(optarg, NULL, 16);
+			break;
 		case 'R':
 			reservenum = strtol(optarg, NULL, 0);
 			break;
