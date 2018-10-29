@@ -42,6 +42,8 @@
 /* Convert arrays of u32 to arrays of u8 */
 #define FTF_NARROW_U32		0x800
 
+/* Convert string-array pin lists to phandle arrays */
+#define FTF_PHANDLE_PINS	0x1000
 
 static struct version_info {
 	int version;
@@ -81,6 +83,7 @@ struct value_node {
 };
 
 static int new_value, old_value;
+static int new_value_size, old_value_size;
 static int emit_flags;
 
 struct value_node *value_head;
@@ -193,7 +196,7 @@ static int seen_value(struct data *data)
 	for (node = value_head; node; node = node->next)
 		if (node->data.len == data->len &&
 		    !memcmp(node->data.val, data->val, data->len))
-			return 0;
+			return 1;
 
 	return 0;
 }
@@ -202,55 +205,73 @@ static void bin_mini_emit_property(void *e, struct property *prop, int nameoff,
 				   struct data *valuebuf)
 {
 	struct value_node *node;
+	struct data data = prop->val;
+
+	if (emit_flags & FTF_PHANDLE_PINS) {
+		if (!strcmp(prop->name, "marvell,pins") ||
+		    !strcmp(prop->name, "nvidia,pins") ||
+		    !strcmp(prop->name, "samsung,pins") ||
+		    !strcmp(prop->name, "sirf,pins") ||
+		    !strcmp(prop->name, "st,pins")) {
+			char *p, *end;
+			int str_count = 0;
+
+			for (p = data.val, end = p + data.len; p < end; p++)
+				if (!*p)
+					str_count++;
+			data.len = 4 * str_count;
+		}
+	}
 
 	bin_emit_cell(e, FDT_PROP);
 	if (!(emit_flags & FTF_SINGLE_CELL_PROP)) {
-		bin_mini_emit_cell(e, prop->val.len);
+		bin_mini_emit_cell(e, data.len);
 		bin_mini_emit_cell(e, nameoff);
 	}
 	if (emit_flags & FTF_INPLACE_BYTE) {
-		if (prop->val.len == 4 &&
-		    fdt32_to_cpu(*(fdt32_t *)prop->val.val) < 0xff)
+		if (data.len == 4 &&
+		    fdt32_to_cpu(*(fdt32_t *)data.val) < 0xff)
 			return;
 	}
 	if (emit_flags & FTF_VALUE_TABLE) {
-		if (seen_value(&prop->val)) {
+		if (seen_value(&data)) {
 			old_value++;
+			old_value_size += data.len;
 			return;
 		}
 		new_value++;
-		*valuebuf = data_append_data(*valuebuf, prop->val.val,
-					     prop->val.len);
+		new_value_size += data.len;
+		*valuebuf = data_append_data(*valuebuf, data.val,
+					     data.len);
+		node = xmalloc(sizeof(struct value_node));
+		node->data.len = data.len;
+		node->data.val = xmalloc(data.len);
+		memcpy(node->data.val, data.val, data.len);
+		node->next = NULL;
+		value_head = node;
 		return;
 	}
 
-	node = xmalloc(sizeof(struct value_node));
-	node->data.len = prop->val.len;
-	node->data.val = xmalloc(prop->val.len);
-	memcpy(node->data.val, prop->val.val, prop->val.len);
-	node->next = NULL;
-	value_head = node;
-
 	if (emit_flags & FTF_NARROW_U32) {
-		if (prop->val.len > 4 && !(prop->val.len % 4)) {
+		if (data.len > 4 && !(data.len % 4)) {
 			struct data *dtbuf = e;
 			int single_byte = 1;
 			fdt32_t *p;
 			int i;
 
-			for (i = 0, p = (fdt32_t *)prop->val.val;
-			     i < prop->val.len / 4; i++, p++) {
+			for (i = 0, p = (fdt32_t *)data.val;
+			     i < data.len / 4; i++, p++) {
 				if (fdt32_to_cpu(*p) & 0xffffff00)
 					single_byte = 0;
 			}
 			if (single_byte) {
-// 				printf("found %d\n", prop->val.len);
-				*dtbuf = data_append_data(*dtbuf, prop->val.val, prop->val.len / 4);
+// 				printf("found %d\n", data.len);
+				*dtbuf = data_append_data(*dtbuf, data.val, data.len / 4);
 				return;
 			}
 		}
 	}
-	bin_mini_emit_data(e, prop->val);
+	bin_mini_emit_data(e, data);
 }
 
 static struct emitter bin_mini_emitter = {
@@ -543,8 +564,6 @@ void dt_to_blob(FILE *f, struct dt_info *dti, int version, int features)
 			     &valuebuf, vi);
 	bin_emit_cell(&dtbuf, FDT_END);
 
-// 	printf("old = %d, new = %d\n", old_value, new_value);
-
 	reservebuf = flatten_reserve_list(dti->reservelist, vi);
 
 	/* Make header */
@@ -589,8 +608,13 @@ void dt_to_blob(FILE *f, struct dt_info *dti, int version, int features)
 	blob = data_append_zeroes(blob, sizeof(struct fdt_reserve_entry));
 	blob = data_merge(blob, dtbuf);
 	blob = data_merge(blob, strbuf);
-	if (version > 17)
+	if (version > 17) {
+		fprintf(stderr, "valuebuf %d\n", valuebuf.len);
+		fprintf(stderr, "old = %d, new = %d\n", old_value, new_value);
+		fprintf(stderr, "size: old = %d, new = %d\n", old_value_size,
+			new_value_size);
 		blob = data_merge(blob, valuebuf);
+	}
 
 	/*
 	 * If the user asked for more space than is used, pad out the blob.

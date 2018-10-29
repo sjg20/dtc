@@ -1799,26 +1799,30 @@ void parse_checks_option(bool warn, bool error, const char *arg)
 	int i;
 	const char *name = arg;
 	bool enable = true;
+	bool all;
 
 	if ((strncmp(arg, "no-", 3) == 0)
 	    || (strncmp(arg, "no_", 3) == 0)) {
 		name = arg + 3;
 		enable = false;
 	}
+	all = streq(name, "all");
 
 	for (i = 0; i < ARRAY_SIZE(check_table); i++) {
 		struct check *c = check_table[i];
 
-		if (streq(c->name, name)) {
+		if (all || streq(c->name, name)) {
 			if (enable)
 				enable_warning_error(c, warn, error);
 			else
 				disable_warning_error(c, warn, error);
-			return;
+			if (!all)
+				return;
 		}
 	}
 
-	die("Unrecognized check name \"%s\"\n", name);
+	if (!all)
+		die("Unrecognized check name \"%s\"\n", name);
 }
 
 void process_checks(bool force, struct dt_info *dti)

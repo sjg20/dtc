@@ -1,6 +1,8 @@
 #!/bin/bash
 
-FLAGS=f00
+FLAGS=1000
+FILES="*.dtb"
+
 DTC=~/cosarm/dtc/dtc
 KERNEL_DIR=~/cosarm/src/third_party/kernel/v4.19
 
@@ -35,7 +37,7 @@ recomp() {
 	out=v18
 	mkdir -p $out
 	mkdir -p dts
-	for f in *.dtb; do
+	for f in $FILES; do
 # 		echo $f
 		fdtdump $f >"dts/${f%.dtb}.dts"
 		if ! fdtdump $f | \
@@ -47,7 +49,7 @@ recomp() {
 	total1=0
 	total2=0
 	MB=$((1024 * 1024))
-	for f in *.dtb; do
+	for f in $FILES; do
 		#ls -l $f $out/$f
 		size1="$(stat -c %s $f)"
 		size2="$(stat -c %s $out/$f)";
