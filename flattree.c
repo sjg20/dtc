@@ -56,9 +56,15 @@
 
 /*
  * Use a byte-wise protocol (with bit 8 meaning the value continues to the next
- * byte
+ * byte. Implies no alignment.
  */
 #define FTF_BYTEWISE		0x10000
+
+/*
+ * Somewhat silly - consider all values as strings of cells and use the bytewise
+ * protocol to emit them
+ */
+#define FTF_BYTEWISE_VALUES	0x20000
 
 static struct version_info {
 	int version;
@@ -213,7 +219,22 @@ static void bin_mini_emit_data(void *e, struct data d)
 {
 	struct data *dtbuf = e;
 
-	*dtbuf = data_append_data(*dtbuf, d.val, d.len);
+	if (emit_flags & FTF_BYTEWISE_VALUES) {
+		cell_t *p = (cell_t *)d.val, *end = p + d.len / 4;
+		cell_t last;
+		unsigned char *cp, *cend;
+
+		while (p < end)
+			bin_mini_emit_u32(e, *p++);
+		last = 0;
+		cp = (unsigned char *)p;
+		cend = cp + (d.len % 3);
+		while (cp < cend)
+			last = (last << 8) | *cp++;
+		bin_mini_emit_u32(e, last);
+	} else {
+		*dtbuf = data_append_data(*dtbuf, d.val, d.len);
+	}
 }
 
 static void bin_mini_emit_beginnode(void *e, struct label *labels)
