@@ -239,12 +239,12 @@ static void bin_mini_emit_property(void *e, struct property *prop, int nameoff,
 			int i;
 
 			for (i = 0, p = (fdt32_t *)prop->val.val;
-			i < prop->val.len / 4; i++, p++) {
+			     i < prop->val.len / 4; i++, p++) {
 				if (fdt32_to_cpu(*p) & 0xffffff00)
 					single_byte = 0;
 			}
-			if (0 && single_byte) {
-				printf("found %d\n", prop->val.len);
+			if (single_byte) {
+// 				printf("found %d\n", prop->val.len);
 				*dtbuf = data_append_data(*dtbuf, prop->val.val, prop->val.len / 4);
 				return;
 			}

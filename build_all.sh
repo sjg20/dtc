@@ -1,6 +1,6 @@
 #!/bin/bash
 
-FLAGS=200
+FLAGS=f00
 DTC=~/cosarm/dtc/dtc
 KERNEL_DIR=~/cosarm/src/third_party/kernel/v4.19
 
