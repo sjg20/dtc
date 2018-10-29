@@ -45,6 +45,21 @@
 /* Convert string-array pin lists to phandle arrays */
 #define FTF_PHANDLE_PINS	0x1000
 
+/* Convert compatible strings to a single cell */
+#define FTF_U32_COMPATIBLE	0x2000
+
+/* Use a flag on a property instead of FDT_END_NODE */
+#define FTF_NO_END_NODE		0x4000
+
+/* Skip all alignment to cell boundaries */
+#define FTF_NO_ALIGN		0x8000
+
+/*
+ * Use a byte-wise protocol (with bit 8 meaning the value continues to the next
+ * byte
+ */
+#define FTF_BYTEWISE		0x10000
+
 static struct version_info {
 	int version;
 	int last_comp_version;
@@ -85,6 +100,12 @@ struct value_node {
 static int new_value, old_value;
 static int new_value_size, old_value_size;
 static int emit_flags;
+
+/*
+ * The last FDT_NODE_END tag was skipped. We cannot skip another one until we
+ * see an FDT_BEGIN_NODE.
+ */
+static bool skipped_end_node;
 
 struct value_node *value_head;
 
@@ -145,11 +166,28 @@ static struct emitter bin_emitter = {
 	.property = bin_emit_property,
 };
 
+static void bin_mini_emit_u32(void *e, cell_t val)
+{
+	struct data *dtbuf = e;
+
+	do {
+		uint byte = val & 0x7f;
+
+		val >>= 7;
+		if (val)
+			byte |= 0x80;
+		*dtbuf = data_append_byte(*dtbuf, byte);
+	} while (val);
+}
+
 static void bin_mini_emit_cell(void *e, cell_t val)
 {
 	struct data *dtbuf = e;
 
-	*dtbuf = data_append_cell(*dtbuf, val);
+	if (emit_flags & FTF_BYTEWISE)
+		bin_mini_emit_u32(e, val);
+	else
+		*dtbuf = data_append_cell(*dtbuf, val);
 }
 
 static void bin_mini_emit_string(void *e, const char *str, int len)
@@ -167,7 +205,8 @@ static void bin_mini_emit_align(void *e, int a)
 {
 	struct data *dtbuf = e;
 
-	*dtbuf = data_append_align(*dtbuf, a);
+	if (!(emit_flags & (FTF_NO_ALIGN | FTF_BYTEWISE)))
+		*dtbuf = data_append_align(*dtbuf, a);
 }
 
 static void bin_mini_emit_data(void *e, struct data d)
@@ -180,11 +219,16 @@ static void bin_mini_emit_data(void *e, struct data d)
 static void bin_mini_emit_beginnode(void *e, struct label *labels)
 {
 	bin_emit_cell(e, FDT_BEGIN_NODE);
+	skipped_end_node = false;
 }
 
 static void bin_mini_emit_endnode(void *e, struct label *labels)
 {
-	bin_emit_cell(e, FDT_END_NODE);
+	if (!skipped_end_node && (emit_flags & FTF_NO_END_NODE)) {
+		skipped_end_node = true;
+	} else {
+		bin_emit_cell(e, FDT_END_NODE);
+	}
 }
 
 static int seen_value(struct data *data)
@@ -223,6 +267,10 @@ static void bin_mini_emit_property(void *e, struct property *prop, int nameoff,
 		}
 	}
 
+	if (emit_flags & FTF_U32_COMPATIBLE) {
+		if (!strcmp(prop->name, "compatible"))
+			data.len = 4;
+	}
 	bin_emit_cell(e, FDT_PROP);
 	if (!(emit_flags & FTF_SINGLE_CELL_PROP)) {
 		bin_mini_emit_cell(e, data.len);
