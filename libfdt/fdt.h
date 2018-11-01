@@ -109,4 +109,15 @@ struct fdt_property {
 #define FDT_V17_SIZE	(FDT_V16_SIZE + sizeof(fdt32_t))
 #define FDT_V18_SIZE	FDT_V17_SIZE
 
+enum {
+	OPCODEM_PROP	= 1 << 0,
+
+	OPCODES_TAG_TYPE	= 1,
+	OPCODEM_TAG_TYPE	= 0xf << OPCODES_TAG_TYPE,
+	OPCODES_LEN		= 8,
+	OPCODEM_LEN		= 0xff << OPCODES_LEN,
+	OPCODES_STR		= 16U,
+	OPCODEM_STR		= 0xffffU << OPCODES_STR,
+};
+
 #endif /* FDT_H */

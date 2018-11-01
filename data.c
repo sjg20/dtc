@@ -127,6 +127,16 @@ struct data data_append_data(struct data d, const void *p, int len)
 	return d;
 }
 
+void data_write_cell_at_offset(struct data *d, struct marker *m,
+			       uint32_t full_tag)
+{
+	fdt32_t value_32;
+
+	value_32 = cpu_to_fdt32(full_tag);
+	printf("write %x to offset %d\n", full_tag, m->offset);
+	memcpy(d->val + m->offset, &value_32, 4);
+}
+
 struct data data_insert_at_marker(struct data d, struct marker *m,
 				  const void *p, int len)
 {

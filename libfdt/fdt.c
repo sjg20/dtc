@@ -55,6 +55,8 @@
 
 #include "libfdt_internal.h"
 
+#include <stdio.h>
+
 /*
  * Minimal sanity check for a read-only tree. fdt_ro_probe_() checks
  * that the given buffer contains what appears to be a flattened
@@ -170,10 +172,18 @@ const void *fdt_offset_ptr(const void *fdt, int offset, unsigned int len)
 	return fdt_offset_ptr_(fdt, offset);
 }
 
-uint32_t fdt_next_tag(const void *fdt, int startoffset, int *nextoffset)
+static int decode_opcode(uint32_t opcode)
+{
+	if (opcode & OPCODEM_PROP)
+		return FDT_PROP;
+	return ((opcode & OPCODEM_TAG_TYPE) >> OPCODES_TAG_TYPE);
+}
+
+uint32_t fdt_next_tagx(const void *fdt, int startoffset, int *nextoffset,
+		       uint32_t *full_tagp)
 {
 	const fdt32_t *tagp, *lenp;
-	uint32_t tag;
+	uint32_t tag, opcode = 0;
 	int offset = startoffset;
 	const char *p;
 
@@ -181,7 +191,13 @@ uint32_t fdt_next_tag(const void *fdt, int startoffset, int *nextoffset)
 	tagp = fdt_offset_ptr(fdt, offset, FDT_TAGSIZE);
 	if (!tagp)
 		return FDT_END; /* premature end */
-	tag = fdt32_to_cpu(*tagp);
+	if (fdt_newtags(fdt)) {
+		opcode = fdt32_to_cpu(*tagp);
+		tag = decode_opcode(opcode);
+		printf("%s: opcode=%x, tag=%x\n", __func__, opcode, tag);
+	} else {
+		tag = fdt32_to_cpu(*tagp);
+	}
 	offset += FDT_TAGSIZE;
 
 	*nextoffset = -FDT_ERR_BADSTRUCTURE;
@@ -196,15 +212,34 @@ uint32_t fdt_next_tag(const void *fdt, int startoffset, int *nextoffset)
 		break;
 
 	case FDT_PROP:
-		lenp = fdt_offset_ptr(fdt, offset, sizeof(*lenp));
-		if (!lenp)
-			return FDT_END; /* premature end */
-		/* skip-name offset, length and value */
-		offset += sizeof(struct fdt_property) - FDT_TAGSIZE
-			+ fdt32_to_cpu(*lenp);
-		if (fdt_version(fdt) < 0x10 && fdt32_to_cpu(*lenp) >= 8 &&
-		    ((offset - fdt32_to_cpu(*lenp)) % 8) != 0)
-			offset += 4;
+		if (fdt_newtags(fdt)) {
+			int len;
+
+			/* skip-name offset, length and value */
+			if ((opcode & OPCODEM_LEN) == OPCODEM_LEN) {
+				lenp = fdt_offset_ptr(fdt, offset,
+						      sizeof(*lenp));
+				if (!lenp)
+					return FDT_END; /* premature end */
+				len = fdt32_to_cpu(*lenp);
+				offset += FDT_TAGSIZE;
+			} else {
+				len = (opcode & OPCODEM_LEN) >> OPCODES_LEN;
+			}
+			if ((opcode & OPCODEM_STR) == OPCODEM_STR)
+				offset += FDT_TAGSIZE;
+			offset += len;
+		} else {
+			lenp = fdt_offset_ptr(fdt, offset, sizeof(*lenp));
+			if (!lenp)
+				return FDT_END; /* premature end */
+			offset += sizeof(struct fdt_property) - FDT_TAGSIZE
+				+ fdt32_to_cpu(*lenp);
+			if (fdt_version(fdt) < 0x10 &&
+			    fdt32_to_cpu(*lenp) >= 8 &&
+			    ((offset - fdt32_to_cpu(*lenp)) % 8) != 0)
+				offset += 4;
+		}
 		break;
 
 	case FDT_END:
@@ -220,7 +255,14 @@ uint32_t fdt_next_tag(const void *fdt, int startoffset, int *nextoffset)
 		return FDT_END; /* premature end */
 
 	*nextoffset = FDT_TAGALIGN(offset);
+	if (full_tagp)
+		*full_tagp = opcode;
 	return tag;
+}
+
+uint32_t fdt_next_tag(const void *fdt, int startoffset, int *nextoffset)
+{
+	return fdt_next_tagx(fdt, startoffset, nextoffset, NULL);
 }
 
 int fdt_check_node_offset_(const void *fdt, int offset)
@@ -253,6 +295,7 @@ int fdt_next_node(const void *fdt, int offset, int *depth)
 	do {
 		offset = nextoffset;
 		tag = fdt_next_tag(fdt, offset, &nextoffset);
+		printf("offset=%d, tag=%d\n", offset, tag);
 
 		switch (tag) {
 		case FDT_PROP:

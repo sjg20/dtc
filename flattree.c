@@ -106,6 +106,7 @@ struct value_node {
 static int new_value, old_value;
 static int new_value_size, old_value_size;
 static int emit_flags;
+static struct marker *node_stack;
 
 /*
  * The last FDT_NODE_END tag was skipped. We cannot skip another one until we
@@ -239,14 +240,41 @@ static void bin_mini_emit_data(void *e, struct data d)
 
 static void bin_mini_emit_beginnode(void *e, struct label *labels)
 {
-	bin_emit_cell(e, FDT_BEGIN_NODE);
-	skipped_end_node = false;
+	struct data *dtbuf = e;
+
+	if (emit_flags & FTF_SINGLE_CELL_PROP) {
+		struct marker *m;
+
+		bin_emit_cell(e, FDT_BEGIN_NODE << OPCODES_TAG_TYPE);
+		m = xmalloc(sizeof(*m));
+		m->offset = dtbuf->len;
+		m->type = TYPE_NODE;
+		m->ref = NULL;
+		m->next = node_stack;
+		node_stack = m;
+	} else {
+		bin_emit_cell(e, FDT_BEGIN_NODE);
+		skipped_end_node = false;
+	}
 }
 
 static void bin_mini_emit_endnode(void *e, struct label *labels)
 {
 	if (!skipped_end_node && (emit_flags & FTF_NO_END_NODE)) {
 		skipped_end_node = true;
+	} else if (emit_flags & FTF_SINGLE_CELL_PROP) {
+		struct data *dtbuf = e;
+		struct marker *m;
+		uint32_t opcode;
+
+		bin_emit_cell(e, FDT_END_NODE << OPCODES_TAG_TYPE);
+		m = node_stack;
+		node_stack = m->next;
+
+		opcode = FDT_BEGIN_NODE << OPCODES_TAG_TYPE;
+		data_write_cell_at_offset(dtbuf, m, opcode);
+
+		free(m);
 	} else {
 		bin_emit_cell(e, FDT_END_NODE);
 	}
@@ -266,6 +294,17 @@ static int seen_value(struct data *data)
 	return 0;
 }
 
+static int string_count(const struct data *data)
+{
+	int str_count = 0;
+	const char *p, *end;
+
+	for (p = data->val, end = p + data->len; p < end; p++)
+		if (!*p)
+			str_count++;
+	return str_count;
+}
+
 static void bin_mini_emit_property(void *e, struct property *prop, int nameoff,
 				   struct data *valuebuf)
 {
@@ -278,24 +317,51 @@ static void bin_mini_emit_property(void *e, struct property *prop, int nameoff,
 		    !strcmp(prop->name, "samsung,pins") ||
 		    !strcmp(prop->name, "sirf,pins") ||
 		    !strcmp(prop->name, "st,pins")) {
-			char *p, *end;
-			int str_count = 0;
+			int str_count = string_count(&data);
 
-			for (p = data.val, end = p + data.len; p < end; p++)
-				if (!*p)
-					str_count++;
 			data.len = 4 * str_count;
 		}
 	}
 
 	if (emit_flags & FTF_U32_COMPATIBLE) {
-		if (!strcmp(prop->name, "compatible"))
-			data.len = 4;
+		if (!strcmp(prop->name, "compatible")) {
+			int str_count = string_count(&data);
+			int i;
+
+			data.len = 4 * str_count;
+			for (i = 0; i < str_count; i++) {
+				fdt32_t val = 0xffff0000 + i;
+
+				memcpy(data.val + i * 4, &val, sizeof(val));
+			}
+		}
 	}
-	bin_emit_cell(e, FDT_PROP);
-	if (!(emit_flags & FTF_SINGLE_CELL_PROP)) {
-		bin_mini_emit_cell(e, data.len);
-		bin_mini_emit_cell(e, nameoff);
+	if (emit_flags & FTF_SINGLE_CELL_PROP) {
+		uint32_t len = data.len;
+		uint32_t str = nameoff;
+		uint32_t opcode;
+
+		opcode = OPCODEM_PROP;
+		opcode |= FDT_PROP << OPCODES_TAG_TYPE;
+		if (len < OPCODEM_LEN) {
+			opcode |= len << OPCODES_LEN;
+			len = 0;
+		} else {
+			opcode |= OPCODEM_LEN;
+		}
+		if (str < OPCODEM_STR) {
+			opcode |= str << OPCODES_STR;
+			str = 0;
+		} else {
+			opcode |= OPCODEM_STR;
+		}
+		bin_emit_cell(e, opcode);
+		if (len)
+			bin_mini_emit_cell(e, len);
+		if (str)
+			bin_mini_emit_cell(e, str);
+	} else {
+		bin_emit_cell(e, FDT_PROP);
 	}
 	if (emit_flags & FTF_INPLACE_BYTE) {
 		if (data.len == 4 &&

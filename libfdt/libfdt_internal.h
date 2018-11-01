@@ -93,4 +93,9 @@ static inline struct fdt_reserve_entry *fdt_mem_rsv_w_(void *fdt, int n)
 
 #define FDT_SW_MAGIC		(~FDT_MAGIC)
 
+static inline int fdt_newtags(const void *fdt)
+{
+	return fdt_version(fdt) >= 0x12;
+}
+
 #endif /* LIBFDT_INTERNAL_H */

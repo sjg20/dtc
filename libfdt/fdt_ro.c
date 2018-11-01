@@ -54,6 +54,7 @@
 #include <libfdt.h>
 
 #include "libfdt_internal.h"
+#include <stdio.h>
 
 static int fdt_nodename_eq_(const void *fdt, int offset,
 			    const char *s, int len)
@@ -237,6 +238,7 @@ int fdt_subnode_offset_namelen(const void *fdt, int offset,
 {
 	int depth;
 
+	printf("1\n");
 	FDT_RO_PROBE(fdt);
 
 	for (depth = 0;
@@ -263,6 +265,7 @@ int fdt_path_offset_namelen(const void *fdt, const char *path, int namelen)
 	const char *p = path;
 	int offset = 0;
 
+	printf("%s\n", __func__);
 	FDT_RO_PROBE(fdt);
 
 	/* see if we have an alias */
@@ -349,8 +352,11 @@ int fdt_first_property_offset(const void *fdt, int nodeoffset)
 {
 	int offset;
 
-	if ((offset = fdt_check_node_offset_(fdt, nodeoffset)) < 0)
+	printf("%s: start\n", __func__);
+	if ((offset = fdt_check_node_offset_(fdt, nodeoffset)) < 0) {
+		printf("%s: return %d\n", __func__, offset);
 		return offset;
+	}
 
 	return nextprop_(fdt, offset);
 }
@@ -363,23 +369,41 @@ int fdt_next_property_offset(const void *fdt, int offset)
 	return nextprop_(fdt, offset);
 }
 
-static const struct fdt_property *fdt_get_property_by_offset_(const void *fdt,
-						              int offset,
-						              int *lenp)
+static const void *fdt_get_property_by_offset_(const void *fdt, int offset,
+					       struct fdt_property *prop_out)
 {
 	int err;
 	const struct fdt_property *prop;
 
 	if ((err = fdt_check_prop_offset_(fdt, offset)) < 0) {
-		if (lenp)
-			*lenp = err;
+		prop_out->len = err;
 		return NULL;
 	}
 
-	prop = fdt_offset_ptr_(fdt, offset);
+	if (fdt_newtags(fdt)) {
+		const fdt32_t *cell = fdt_offset_ptr_(fdt, offset);
+		uint32_t opcode, len, nameoff;
 
-	if (lenp)
-		*lenp = fdt32_ld(&prop->len);
+		opcode = fdt32_ld(cell++);
+		if ((opcode & OPCODEM_LEN) == OPCODEM_LEN)
+			len = fdt32_ld(cell++);
+		else
+			len = (opcode & OPCODEM_LEN) >> OPCODES_LEN;
+		if ((opcode & OPCODEM_STR) == OPCODEM_STR)
+			nameoff = fdt32_ld(cell++);
+		else
+			nameoff = (opcode & OPCODEM_STR) >> OPCODES_STR;
+		prop_out->len = len;
+		prop_out->nameoff = nameoff;
+		printf("%s: len=%x, nameoff=%x\n", __func__, len, nameoff);
+		return cell;
+	} else {
+		prop = fdt_offset_ptr_(fdt, offset);
+		prop_out->len = fdt32_to_cpu(prop->len);
+		prop_out->nameoff = fdt32_to_cpu(prop->nameoff);
+		return prop + 1;
+	}
+
 
 	return prop;
 }
@@ -388,6 +412,9 @@ const struct fdt_property *fdt_get_property_by_offset(const void *fdt,
 						      int offset,
 						      int *lenp)
 {
+	const struct fdt_property *p;
+	struct fdt_property prop;
+
 	/* Prior to version 16, properties may need realignment
 	 * and this API does not work. fdt_getprop_*() will, however. */
 
@@ -395,9 +422,14 @@ const struct fdt_property *fdt_get_property_by_offset(const void *fdt,
 		if (lenp)
 			*lenp = -FDT_ERR_BADVERSION;
 		return NULL;
+	} else if (fdt_newtags(fdt)) {
+		return NULL;
 	}
 
-	return fdt_get_property_by_offset_(fdt, offset, lenp);
+	p = fdt_get_property_by_offset_(fdt, offset, &prop);
+	if (lenp)
+		*lenp = prop.len;
+	return p - 1;
 }
 
 static const struct fdt_property *fdt_get_property_namelen_(const void *fdt,
@@ -407,20 +439,22 @@ static const struct fdt_property *fdt_get_property_namelen_(const void *fdt,
 							    int *lenp,
 							    int *poffset)
 {
+	struct fdt_property tprop;
+
 	for (offset = fdt_first_property_offset(fdt, offset);
 	     (offset >= 0);
 	     (offset = fdt_next_property_offset(fdt, offset))) {
 		const struct fdt_property *prop;
 
-		if (!(prop = fdt_get_property_by_offset_(fdt, offset, lenp))) {
+		if (!(prop = fdt_get_property_by_offset_(fdt, offset,
+							 &tprop))) {
 			offset = -FDT_ERR_INTERNAL;
 			break;
 		}
-		if (fdt_string_eq_(fdt, fdt32_ld(&prop->nameoff),
-				   name, namelen)) {
+		if (fdt_string_eq_(fdt, tprop.nameoff, name, namelen)) {
 			if (poffset)
 				*poffset = offset;
-			return prop;
+			return prop - 1;
 		}
 	}
 
@@ -478,15 +512,19 @@ const void *fdt_getprop_by_offset(const void *fdt, int offset,
 				  const char **namep, int *lenp)
 {
 	const struct fdt_property *prop;
+	struct fdt_property tprop;
 
-	prop = fdt_get_property_by_offset_(fdt, offset, lenp);
-	if (!prop)
+	prop = fdt_get_property_by_offset_(fdt, offset, &tprop);
+	if (!prop) {
+		if (lenp)
+			*lenp = tprop.len;
 		return NULL;
+	}
 	if (namep) {
 		const char *name;
 		int namelen;
-		name = fdt_get_string(fdt, fdt32_ld(&prop->nameoff),
-				      &namelen);
+
+		name = fdt_get_string(fdt, tprop.nameoff, &namelen);
 		if (!name) {
 			if (lenp)
 				*lenp = namelen;
@@ -499,7 +537,9 @@ const void *fdt_getprop_by_offset(const void *fdt, int offset,
 	if (fdt_version(fdt) < 0x10 && (offset + sizeof(*prop)) % 8 &&
 	    fdt32_ld(&prop->len) >= 8)
 		return prop->data + 4;
-	return prop->data;
+	if (lenp)
+		*lenp = tprop.len;
+	return prop;
 }
 
 const void *fdt_getprop(const void *fdt, int nodeoffset,

@@ -144,6 +144,7 @@ static int list_properties(const void *blob, int node)
 	int prop;
 
 	prop = fdt_first_property_offset(blob, node);
+	printf("%s: got %d\n", __func__, prop);
 	do {
 		/* Stop silently when there are no more properties */
 		if (prop < 0)
@@ -275,8 +276,10 @@ static int do_fdtget(struct display_info *disp, const char *filename,
 	if (!blob)
 		return -1;
 
+	printf("%s\n", __func__);
 	for (i = 0; i + args_per_step <= arg_count; i += args_per_step) {
 		node = fdt_path_offset(blob, arg[i]);
+		printf("%s: node=%d\n", __func__, node);
 		if (node < 0) {
 			if (disp->default_val) {
 				puts(disp->default_val);

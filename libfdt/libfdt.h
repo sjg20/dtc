@@ -55,7 +55,7 @@
 #include <fdt.h>
 
 #define FDT_FIRST_SUPPORTED_VERSION	0x02
-#define FDT_LAST_SUPPORTED_VERSION	0x11
+#define FDT_LAST_SUPPORTED_VERSION	0x12
 
 /* Error codes: informative error codes */
 #define FDT_ERR_NOTFOUND	1
@@ -153,6 +153,9 @@ static inline void *fdt_offset_ptr_w(void *fdt, int offset, int checklen)
 }
 
 uint32_t fdt_next_tag(const void *fdt, int offset, int *nextoffset);
+
+uint32_t fdt_next_tagx(const void *fdt, int startoffset, int *nextoffset,
+		       uint32_t *full_tagp);
 
 /*
  * Alignment helpers:

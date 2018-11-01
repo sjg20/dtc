@@ -83,6 +83,7 @@ enum markertype {
 	TYPE_UINT32,
 	TYPE_UINT64,
 	TYPE_STRING,
+	TYPE_NODE,	/* Start of a node */
 };
 extern const char *markername(enum markertype markertype);
 
@@ -98,7 +99,6 @@ struct data {
 	char *val;
 	struct marker *markers;
 };
-
 
 #define empty_data ((struct data){ 0 /* all .members = 0 or NULL */ })
 
@@ -133,6 +133,9 @@ struct data data_append_align(struct data d, int align);
 struct data data_add_marker(struct data d, enum markertype type, char *ref);
 
 bool data_is_one_string(struct data d);
+
+void data_write_cell_at_offset(struct data *d, struct marker *m,
+			       uint32_t full_tag);
 
 /* DT constraints */
 

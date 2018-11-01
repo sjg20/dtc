@@ -1,6 +1,6 @@
 #!/bin/bash
 
-FLAGS=e700
+FLAGS=2500
 FILES="*.dtb"
 
 DTC=~/cosarm/dtc/dtc
