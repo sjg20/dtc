@@ -238,7 +238,7 @@ int fdt_subnode_offset_namelen(const void *fdt, int offset,
 {
 	int depth;
 
-	printf("1\n");
+// 	printf("1\n");
 	FDT_RO_PROBE(fdt);
 
 	for (depth = 0;
@@ -265,7 +265,7 @@ int fdt_path_offset_namelen(const void *fdt, const char *path, int namelen)
 	const char *p = path;
 	int offset = 0;
 
-	printf("%s\n", __func__);
+// 	printf("%s\n", __func__);
 	FDT_RO_PROBE(fdt);
 
 	/* see if we have an alias */
@@ -352,9 +352,9 @@ int fdt_first_property_offset(const void *fdt, int nodeoffset)
 {
 	int offset;
 
-	printf("%s: start\n", __func__);
+// 	printf("%s: start\n", __func__);
 	if ((offset = fdt_check_node_offset_(fdt, nodeoffset)) < 0) {
-		printf("%s: return %d\n", __func__, offset);
+// 		printf("%s: return %d\n", __func__, offset);
 		return offset;
 	}
 
@@ -395,7 +395,7 @@ static const void *fdt_get_property_by_offset_(const void *fdt, int offset,
 			nameoff = (opcode & OPCODEM_STR) >> OPCODES_STR;
 		prop_out->len = len;
 		prop_out->nameoff = nameoff;
-		printf("%s: len=%x, nameoff=%x\n", __func__, len, nameoff);
+// 		printf("%s: len=%x, nameoff=%x\n", __func__, len, nameoff);
 		return cell;
 	} else {
 		prop = fdt_offset_ptr_(fdt, offset);
@@ -454,6 +454,8 @@ static const struct fdt_property *fdt_get_property_namelen_(const void *fdt,
 		if (fdt_string_eq_(fdt, tprop.nameoff, name, namelen)) {
 			if (poffset)
 				*poffset = offset;
+			if (lenp)
+				*lenp = tprop.len;
 			return prop - 1;
 		}
 	}

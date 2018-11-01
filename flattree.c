@@ -330,10 +330,11 @@ static void bin_mini_emit_property(void *e, struct property *prop, int nameoff,
 
 			data.len = 4 * str_count;
 			for (i = 0; i < str_count; i++) {
-				fdt32_t val = 0xffff0000 + i;
+				fdt32_t val = cpu_to_fdt32(0xffff0000 + i);
 
 				memcpy(data.val + i * 4, &val, sizeof(val));
 			}
+// 			printf("str_count=%d\n", str_count);
 		}
 	}
 	if (emit_flags & FTF_SINGLE_CELL_PROP) {
