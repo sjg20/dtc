@@ -381,11 +381,15 @@ static const void *fdt_get_property_by_offset_(const void *fdt, int offset,
 	}
 
 	if (fdt_newtags(fdt)) {
-		const fdt32_t *cell = fdt_offset_ptr_(fdt, offset);
+		const fdt32_t *base = fdt_offset_ptr_(fdt, offset), *cell;
 		uint32_t opcode, len, nameoff;
 
+		cell = base;
 		opcode = fdt32_ld(cell++);
-		if ((opcode & OPCODEM_LEN) == OPCODEM_LEN)
+
+		if (opcode & OPCODEM_INPLACE)
+			len = 1;
+		else if ((opcode & OPCODEM_LEN) == OPCODEM_LEN)
 			len = fdt32_ld(cell++);
 		else
 			len = (opcode & OPCODEM_LEN) >> OPCODES_LEN;
@@ -396,6 +400,8 @@ static const void *fdt_get_property_by_offset_(const void *fdt, int offset,
 		prop_out->len = len;
 		prop_out->nameoff = nameoff;
 // 		printf("%s: len=%x, nameoff=%x\n", __func__, len, nameoff);
+		if (opcode & OPCODEM_INPLACE)
+			return (const char *)base + (3 - OPCODES_VAL / 8);
 		return cell;
 	} else {
 		prop = fdt_offset_ptr_(fdt, offset);

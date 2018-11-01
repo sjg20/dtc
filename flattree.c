@@ -260,7 +260,7 @@ static void bin_mini_emit_beginnode(void *e, struct label *labels)
 
 static void bin_mini_emit_endnode(void *e, struct label *labels)
 {
-	if (!skipped_end_node && (emit_flags & FTF_NO_END_NODE)) {
+	if ((emit_flags & FTF_NO_END_NODE) && !skipped_end_node) {
 		skipped_end_node = true;
 	} else if (emit_flags & FTF_SINGLE_CELL_PROP) {
 // 		struct data *dtbuf = e;
@@ -373,6 +373,8 @@ static void bin_mini_emit_property(void *e, struct property *prop, int nameoff,
 			bin_mini_emit_cell(e, str);
 	} else {
 		bin_emit_cell(e, FDT_PROP);
+		bin_mini_emit_cell(e, data.len);
+		bin_mini_emit_cell(e, nameoff);
 	}
 	if (emit_flags & FTF_INPLACE_BYTE) {
 		if (data.len == 4 &&
