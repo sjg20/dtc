@@ -185,7 +185,8 @@ static int list_subnodes(const void *blob, int node)
 					pathp = "/";	/* root is nameless */
 				if (level == 1)
 					puts(pathp);
-			}
+			} else
+				printf("%d: %s\n", level, pathp);
 			level++;
 			if (level >= MAX_LEVEL) {
 				printf("Nested too deep, aborting.\n");

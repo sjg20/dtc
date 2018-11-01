@@ -263,16 +263,16 @@ static void bin_mini_emit_endnode(void *e, struct label *labels)
 	if (!skipped_end_node && (emit_flags & FTF_NO_END_NODE)) {
 		skipped_end_node = true;
 	} else if (emit_flags & FTF_SINGLE_CELL_PROP) {
-		struct data *dtbuf = e;
+// 		struct data *dtbuf = e;
 		struct marker *m;
-		uint32_t opcode;
+// 		uint32_t opcode;
 
 		bin_emit_cell(e, FDT_END_NODE << OPCODES_TAG_TYPE);
 		m = node_stack;
 		node_stack = m->next;
 
-		opcode = FDT_BEGIN_NODE << OPCODES_TAG_TYPE;
-		data_write_cell_at_offset(dtbuf, m, opcode);
+// 		opcode = FDT_BEGIN_NODE << OPCODES_TAG_TYPE;
+// 		data_write_cell_at_offset(dtbuf, m, opcode);
 
 		free(m);
 	} else {
@@ -343,13 +343,13 @@ static void bin_mini_emit_property(void *e, struct property *prop, int nameoff,
 
 		opcode = OPCODEM_PROP;
 		opcode |= FDT_PROP << OPCODES_TAG_TYPE;
-		if (len < OPCODEM_LEN) {
+		if (len < (1 << OPCODEW_LEN) - 1) {
 			opcode |= len << OPCODES_LEN;
 			len = 0;
 		} else {
 			opcode |= OPCODEM_LEN;
 		}
-		if (str < OPCODEM_STR) {
+		if (str < (1 << OPCODEW_STR) - 1) {
 			opcode |= str << OPCODES_STR;
 			str = 0;
 		} else {

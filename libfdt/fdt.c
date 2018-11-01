@@ -194,7 +194,8 @@ uint32_t fdt_next_tagx(const void *fdt, int startoffset, int *nextoffset,
 	if (fdt_newtags(fdt)) {
 		opcode = fdt32_to_cpu(*tagp);
 		tag = decode_opcode(opcode);
-		printf("%s: opcode=%x, tag=%x\n", __func__, opcode, tag);
+		printf("%s: offset=%x, opcode=%x, tag=%x\n", __func__,
+		       offset + fdt_off_dt_struct(fdt), opcode, tag);
 	} else {
 		tag = fdt32_to_cpu(*tagp);
 	}
