@@ -217,7 +217,9 @@ uint32_t fdt_next_tagx(const void *fdt, int startoffset, int *nextoffset,
 			int len;
 
 			/* skip-name offset, length and value */
-			if ((opcode & OPCODEM_LEN) == OPCODEM_LEN) {
+			if (opcode & OPCODEM_INPLACE) {
+				len = 0;
+			} else if ((opcode & OPCODEM_LEN) == OPCODEM_LEN) {
 				lenp = fdt_offset_ptr(fdt, offset,
 						      sizeof(*lenp));
 				if (!lenp)

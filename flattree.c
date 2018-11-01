@@ -337,12 +337,22 @@ static void bin_mini_emit_property(void *e, struct property *prop, int nameoff,
 		}
 	}
 	if (emit_flags & FTF_SINGLE_CELL_PROP) {
-		uint32_t len = data.len;
+		uint32_t len;
 		uint32_t str = nameoff;
 		uint32_t opcode;
 
 		opcode = OPCODEM_PROP;
 		opcode |= FDT_PROP << OPCODES_TAG_TYPE;
+		if ((emit_flags & FTF_INPLACE_BYTE) && (data.len == 4)) {
+			uint32_t val = fdt32_to_cpu(*(fdt32_t *)data.val);
+
+			if (val < 0xff) {
+				opcode |= OPCODEM_INPLACE;
+				opcode |= val << OPCODES_VAL;
+				data.len = 0;
+			}
+		}
+		len = data.len;
 		if (len < (1 << OPCODEW_LEN) - 1) {
 			opcode |= len << OPCODES_LEN;
 			len = 0;
