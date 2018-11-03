@@ -1,0 +1,118 @@
+Kernel Device-Tree Validator based on Python and pylibfdt
+=========================================================
+
+Background
+----------
+
+As part of the discussions at Linux Plumbers 2018 [1] I showed a few people a
+device-tree validator which uses a Python-based schema. This was developed for
+Chrome OS to deal with the validation problem there.
+
+From my someone limited understanding of YAML, JSON and validation in that
+world [2] it seems to me that it was very difficult to get that technology to
+validate the kernel DT files successfully: lots of complex tooling, regexs and
+potentially a need to move to yaml for the source format. In addition it was not
+clear to me that it would be possible to do the sort of deep validation that is
+desirable with the kernel DT files, for example checking subnodes do not
+conflict, handling phandles which link nodes in both directions. Some of this
+has in fact been handled by mnodifying dtc, which seems like a better approach.
+But it has its limits, without deep knowledge of the schema.
+
+So I put together this proof-of-concept to show another approach, to seek
+comments and see what people think.
+
+Bad things:
+- It's Python
+- It requires a new input format for the schema
+- There would be a lot of work needed to turn this into production code
+- Many others that I suspect you are about to point out
+
+Good things:
+- It is quite easy to write the schema in Python
+- The validation rules are easy to write and understand, even complex ones
+- Highly complex validation rules (e.g. covering multiple linked node) are
+    possible to write, offering a very powerful validation framework
+- It is fast and works on the .dtb file directly
+- It gives simple error messages when it finds a problem
+- It might be possible to automatically convert .txt files to .py, at least as
+    a starting point (see binding_to_py.py below)
+
+
+How to try it
+-------------
+
+1. Build pylibfdt
+
+   clone https://github.com/sglass68/dtc.git
+   and checkout branch 'kernel-validator'
+
+   cd dtc
+   sudo apt-get install swig python3-dev
+   PYTHON=python2 make
+
+You can leave out the environemnt variable if you like, but the Makefile uses
+a strange name for the _libfdt.so file in some cases with Python 3, so you have
+to know what you are doing.
+
+
+2. Obtain the kernel patch
+
+   clone https://github.com/sglass68/linux.git
+   and checkout branch 'schema'
+
+
+3. Run the validator
+
+    KERNEL=/path/to/kernel
+    PYTHONPATH=pylibfdt python validate_dts.py -k \
+            $KERNEL/arch/arm/boot/dts/zynq-zybo.dts -d
+
+You should see a lot of messages like:
+
+    No schema for: xlnx,zynq-can-1.0
+
+This is because only a small subset of the kernel schema has been convered to
+Python so far.
+
+
+4. Try changing something
+
+Open zynq-zybo.dts and change 'device_type' to 'device-type'. Then run the
+validator again and you should see:
+
+arch/arm/boot/dts/zynq-zybo.dts:
+/memory@0: Unexpected property 'device-type', valid list is (device_type, reg, #address-cells, #size-cells, interrupt-parent)
+/memory@0: Required property 'device_type' missing
+
+
+5. Try auto-generating the schema
+
+There is a very simple tool which attempts to convert from the kernel .txt
+format for DT bindings, to Python.
+
+   PYTHONPATH=pylibfdt python binding_to_py.py \
+       Documentation/devicetree/bindings/iio/adc/xilinx-xadc.txt
+
+This should produce a file in the same directory as the binding file, called
+xilinx-xadc.py
+
+The structure of the file is a hierarchical set of nodes and properties for a
+particular set of compatible strings.
+
+
+5. Take a look at the code
+
+validate_dts.py is the validator
+binding_to_py.py is the .txt parser and .py emitter
+
+Both are pretty rough. I'm not looking for a code review :-)
+
+
+[1] https://linuxplumbersconf.org/event/2/contributions/166/
+[2] https://elinux.org/Device_tree_future#Devicetree_Verification
+
+
+
+Simon Glass
+sjg@chromium.org
+Easter 2019
