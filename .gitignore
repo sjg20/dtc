@@ -16,3 +16,5 @@ lex.yy.c
 /fdtoverlay
 /patches
 /.pc
+*.pyc
+
