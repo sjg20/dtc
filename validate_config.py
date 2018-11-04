@@ -56,7 +56,7 @@ import fdt, fdt_util
 from validate_schema import NodeAny, NodeDesc, NodeModel, NodeSubmodel
 from validate_schema import PropCustom, PropDesc, PropString, PropStringList
 from validate_schema import PropPhandleTarget, PropPhandle, CheckPhandleTarget
-from validate_schema import PropAny, PropBool, PropFile, PropFloat
+from validate_schema import PropAny, PropBool, PropFile, PropFloat, PropIntList
 
 
 def ParseArgv(argv):
@@ -290,12 +290,19 @@ class CrosConfigValidator(object):
       node: name of fdt.Node to search for
       parent_schema: Schema for the parent node
     """
-    if node.name == '/':
-      schema = parent_schema
+    schema = None
+    if 'compatible' in node.props:
+      compats = node.props['compatible']
+      #print('compats', compats.value)
+      if not isinstance(compats, list):
+        compats = [compats]
+      for compat in compats:
+        if compat in parent_schema:
+          schema = parent_schema[compat]
     else:
       schema = self.GetSchema(node, parent_schema)
-      if schema is None:
-        return
+    if schema is None:
+      return
 
     self._ValidateSchema(node, schema)
     for subnode in node.subnodes.values():
@@ -342,16 +349,6 @@ class CrosConfigValidator(object):
   def Prepare(self, _fdt):
     """Locate all the models and submodels before we start"""
     self._fdt = _fdt
-    models = self._fdt.GetNode('/chromeos/models')
-    for model in models.subnodes.values():
-      self.model_list.append(model.name)
-      sub_models = model.FindNode('submodels')
-      if sub_models:
-        self.submodel_list[model.name] = (
-            [sm.name for sm in sub_models.subnodes.values()])
-      else:
-        self.submodel_list[model.name] = []
-
 
   def Start(self, fnames, partial=False):
     """Start validating a master configuration file
@@ -374,7 +371,6 @@ class CrosConfigValidator(object):
         dtb, tmpfile = fdt_util.EnsureCompiled(fnames[0])
       self.Prepare(fdt.FdtScan(dtb))
 
-      # Validate the entire master configuration
       self._ValidateTree(self._fdt.GetRoot(), self._schema)
     finally:
       if tmpfile:
@@ -433,84 +429,6 @@ class CrosConfigValidator(object):
     return phandle_props
 
 
-# Known directories for installation
-CRAS_CONFIG_DIR = '/etc/cras'
-UCM_CONFIG_DIR = '/usr/share/alsa/ucm'
-LIB_FIRMWARE = '/lib/firmware'
-TOUCH_FIRMWARE = '/opt/google/touch/firmware'
-# In order not to pollute the regular /usr/sbin with model specific files
-# putting the files underneath chromeos-config
-ARC_SBIN_DIR = '/usr/share/chromeos-config/sbin'
-
-# Basic firmware schema, which is augmented depending on the situation.
-FW_COND = {'shares': False, '../whitelabel': False}
-
-BASE_FIRMWARE_SCHEMA = [
-    PropString('bcs-overlay', True, 'overlay-.*', FW_COND),
-    PropString('ec-image', False, r'bcs://.*\.tbz2', FW_COND),
-    PropString('main-image', False, r'bcs://.*\.tbz2', FW_COND),
-    PropString('main-rw-image', False, r'bcs://.*\.tbz2', FW_COND),
-    PropString('pd-image', False, r'bcs://.*\.tbz2', FW_COND),
-    PropStringList('extra', False,
-                   r'(\${(FILESDIR|SYSROOT)}/[a-z/]+)|' +
-                   r'(bcs://[A-Za-z0-9\.]+\.tbz2)', FW_COND),
-    ]
-
-# Firmware build targets schema, defined here since it is used in a few places.
-BUILD_TARGETS_SCHEMA = NodeDesc('build-targets', True, elements=[
-    PropString('coreboot', True),
-    PropString('ec', True),
-    PropString('depthcharge', True),
-    PropString('libpayload', True),
-    PropString('u-boot'),
-    PropString('cr50'),
-    PropString('base'),
-    PropStringList('ec_extras')
-], conditional_props={'shares': False, '../whitelabel': False})
-
-BASE_AUDIO_SCHEMA = [
-    PropString('card', True, '', {'audio-type': False}),
-    PropFile('volume', True, '', {'audio-type': False}, CRAS_CONFIG_DIR),
-    PropFile('dsp-ini', True, '', {'audio-type': False}, CRAS_CONFIG_DIR),
-    PropFile('hifi-conf', True, '', {'audio-type': False}, UCM_CONFIG_DIR),
-    PropFile('alsa-conf', True, '', {'audio-type': False}, UCM_CONFIG_DIR),
-    PropString('topology-name', False, r'\w+'),
-    PropFile('topology-bin', False, '', {'audio-type': False}, LIB_FIRMWARE),
-
-    # TODO(sjg@chromium.org): There is no validation that we have these two.
-    # They must both exist either in the model's audio node or here.
-    PropFile('cras-config-dir', False, r'[\w${}]+', target_dir=CRAS_CONFIG_DIR),
-    PropString('ucm-suffix', False, r'[\w${}]+'),
-]
-
-ARC_PROPERTIES_SCHEMA = [
-    PropString('product', False, '[a-z0-9]+', {'../whitelabel': False}),
-    PropString('device', False, '[{}a-z0-9_]+', {'../whitelabel': False}),
-    PropString('oem', False),
-    PropString('marketing-name', False),
-    PropString('metrics-tag', False),
-    PropString('first-api-level', False, '[0-9]+'),
-]
-
-BASE_AUDIO_NODE = [
-    NodeAny(r'main', [
-        PropPhandle('audio-type', '/chromeos/family/audio/ANY',
-                    False),
-    ] + BASE_AUDIO_SCHEMA)
-]
-
-BASE_POWER_SCHEMA = [
-    PropString('charging-ports'),
-    PropFloat('keyboard-backlight-no-als-brightness', False, (0, 100)),
-    PropFloat('low-battery-shutdown-percent', False, (0, 100)),
-    PropFloat('power-supply-full-factor', False, (0.001, 1.0)),
-    PropString('set-wifi-transmit-power-for-tablet-mode', False, '0|1'),
-    PropString('suspend-to-idle', False, '0|1'),
-    PropString('touchpad-wakeup', False, '0|1'),
-]
-
-NOT_WL = {'whitelabel': False}
-
 """This is the schema. It is a hierarchical set of nodes and properties, just
 like the device tree. If an object subclasses NodeDesc then it is a node,
 possibly with properties and subnodes.
@@ -518,163 +436,11 @@ possibly with properties and subnodes.
 In this way it is possible to describe the schema in a fairly natural,
 hierarchical way.
 """
-SCHEMA = NodeDesc('/', True, [
-    NodeDesc('chromeos', True, [
-        NodeDesc('family', True, [
-            NodeDesc('audio', elements=[
-                NodeAny('', [PropPhandleTarget()] +
-                        copy.deepcopy(BASE_AUDIO_SCHEMA)),
-            ]),
-            NodeDesc('bcs', False, [
-                NodeAny('', [
-                    PropPhandleTarget(),
-                    PropString('overlay', False, 'overlay-.*'),
-                    PropString('package'),
-                    PropString('tarball'),
-                    PropString('ebuild-version', False, '[-.0-9r]+'),
-                ]),
-            ]),
-            NodeDesc('power', elements=[
-                NodeAny('', [PropPhandleTarget()] +
-                        copy.deepcopy(BASE_POWER_SCHEMA)),
-            ]),
-            NodeDesc('arc', elements=[
-                NodeDesc('build-properties', elements=[
-                    NodeAny('', [PropPhandleTarget()] +
-                            copy.deepcopy(ARC_PROPERTIES_SCHEMA)),
-                ]),
-            ]),
-            NodeDesc('firmware', elements=[
-                NodeAny('', [
-                    PropPhandleTarget(),
-                    copy.deepcopy(BUILD_TARGETS_SCHEMA),
-                    ] + copy.deepcopy(BASE_FIRMWARE_SCHEMA))
-            ]),
-            NodeDesc('touch', False, [
-                NodeAny('', [
-                    PropPhandleTarget(),
-                    PropPhandle('bcs-type', '/chromeos/family/bcs/ANY'),
-                    PropFile('firmware-bin', True, target_dir=TOUCH_FIRMWARE),
-                    PropFile('firmware-symlink', True, target_dir=LIB_FIRMWARE),
-                    PropString('vendor', True, ''),
-                ]),
-            ]),
-            NodeDesc('mapping', False, [
-                NodeAny(r'sku-map(@[0-9])?', [
-                    PropString('platform-name', False, ''),
-                    PropString('smbios-name-match', False, ''),
-                    PropPhandle('single-sku', '/chromeos/models/MODEL', False),
-                    PropCustom('simple-sku-map',
-                               CrosConfigValidator.ValidateSkuMap, False),
-                ]),
-            ]),
-        ]),
-        NodeDesc('models', True, [
-            NodeModel([
-                PropPhandleTarget(),
-                PropPhandle('default', '/chromeos/models/MODEL', False),
-                PropPhandle('whitelabel', '/chromeos/models/MODEL', False),
-                NodeDesc('firmware', False, [
-                    PropPhandle('shares', '/chromeos/family/firmware/ANY',
-                                False, {'../whitelabel': False}),
-                    PropString(('sig-id-in-customization-id'),
-                               conditional_props={'../whitelabel': False}),
-                    PropString('key-id', False, '[A-Z][A-Z0-9]+'),
-                    PropBool('no-firmware'),
-                    copy.deepcopy(BUILD_TARGETS_SCHEMA)
-                    ] + copy.deepcopy(BASE_FIRMWARE_SCHEMA)),
-                PropString('brand-code', False, '[A-Z]{4}'),
-                PropString('powerd-prefs', conditional_props=NOT_WL),
-                PropString('test-label', False, '[a-z0-9_]+'),
-                PropString('wallpaper', False, '[a-z_]+'),
-                PropString('oem-id', False, '[0-9]+'),
-                NodeDesc('audio', False, copy.deepcopy(BASE_AUDIO_NODE),
-                         conditional_props=NOT_WL),
-                NodeDesc('arc', False, [
-                    PropFile('hw-features', False, '',
-                             target_dir=ARC_SBIN_DIR),
-                    NodeDesc('build-properties', False, [
-                        PropPhandle('arc-properties-type',
-                                    '/chromeos/family/arc/build-properties/ANY',
-                                    False, {'../whitelabel': False})
-                    ] + copy.deepcopy(ARC_PROPERTIES_SCHEMA)),
-                ], conditional_props=NOT_WL),
-                NodeDesc('modem', False, [
-                    PropString('firmware-variant', False, '[a-z0-9_]+'),
-                ]),
-                NodeDesc('power', False, [
-                    PropPhandle('power-type', '/chromeos/family/power/ANY',
-                                False),
-                ] + copy.deepcopy(BASE_POWER_SCHEMA), conditional_props=NOT_WL),
-                NodeDesc('submodels', False, [
-                    NodeSubmodel([
-                        PropPhandleTarget(),
-                        NodeDesc('audio', False, copy.deepcopy(BASE_AUDIO_NODE),
-                                 conditional_props={'../../audio': False}),
-                        NodeDesc('touch', False, [
-                            PropString('present', False, r'yes|no|probe'),
-                            PropString('probe-regex', False, ''),
-                        ]),
-                    ])
-                ], conditional_props=NOT_WL),
-                NodeDesc('thermal', False, [
-                    PropFile('dptf-dv', False, r'\w+/dptf.dv',
-                             target_dir='/etc/dptf'),
-                ], conditional_props=NOT_WL),
-                NodeDesc('touch', False, [
-                    PropString('present', False, r'yes|no|probe'),
-                    # We want to validate that probe-regex is only present when
-                    # 'present' = 'probe', but have no way of doing this
-                    # currently.
-                    PropString('probe-regex', False, ''),
-                    NodeAny(r'(stylus|touchpad|touchscreen)(@[0-9])?', [
-                        PropPhandle('bcs-type', '/chromeos/family/bcs/ANY'),
-                        PropString('pid', False),
-                        PropString('version', True),
-                        PropPhandle('touch-type', '/chromeos/family/touch/ANY',
-                                    False),
-                        PropFile('firmware-bin', True, '',
-                                 {'touch-type': False},
-                                 target_dir=TOUCH_FIRMWARE),
-                        PropFile('firmware-symlink', True, '',
-                                 {'touch-type': False},
-                                 target_dir=LIB_FIRMWARE),
-                        PropString('date-code', False),
-                    ]),
-                ], conditional_props=NOT_WL),
-                NodeDesc('whitelabels', False, [
-                    NodeAny('', [
-                        PropString('brand-code', False, '[A-Z]{4}'),
-                        PropString('wallpaper', False, '[a-z_]+'),
-                        PropString('key-id', False, '[A-Z][A-Z0-9]+'),
-                    ]),
-                ], conditional_props=NOT_WL),
-                NodeDesc('ui', False, [
-                    NodeDesc('power-button', False, [
-                        PropString('edge', True, 'left|right|top|bottom'),
-                        PropFloat('position', True, (0, 1)),
-                    ]),
-                ], conditional_props=NOT_WL),
-            ])
-        ]),
-        NodeDesc('schema', False, [
-            NodeDesc('target-dirs', False, [
-                PropAny(),
-            ]),
-            PropStringList('phandle-properties'),
-        ])
-    ])
-])
-
-
-def GetValidator():
-  """Get a schema validator for use by another module
-
-  Returns:
-    CrosConfigValidator object
-  """
-  return CrosConfigValidator(SCHEMA, raise_on_error=True)
-
+SCHEMA = {
+  'arm,pl310-cache': NodeDesc('/', True, [
+    PropIntList('arm,data-latency', True, [1, 256]),
+  ])
+}
 
 def ShowErrors(fname, errors):
   """Show validation errors

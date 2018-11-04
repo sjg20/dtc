@@ -110,6 +110,61 @@ class PropString(PropDesc):
                (prop.name, prop.value, pattern))
 
 
+class PropInt(PropDesc):
+  """An integer property"""
+  def __init__(self, name, required=False, int_range=None,
+               conditional_props=None):
+    super(PropInt, self).__init__(name, 'int', required, conditional_props)
+    self.int_range = int_range
+
+  def Validate(self, val, prop):
+    """Check that the value is an int"""
+    try:
+      int_val = int(prop.value)
+      if self.int_range is not None:
+        # pylint: disable=unpacking-non-sequence
+        min_val, max_val = self.int_range
+        if int_val < min_val or int_val > max_val:
+          val.Fail(prop.node.path, "'%s' value '%s' is out of range [%g..%g]" %
+                   (prop.name, prop.value, min_val, max_val))
+
+    except ValueError:
+      val.Fail(prop.node.path, "'%s' value '%s' is not a float" %
+               (prop.name, prop.value))
+
+
+class PropIntList(PropDesc):
+  """An int-list property schema element
+
+  Note that the list may be empty in which case no validation is performed.
+
+  Args:
+    int_range: List: min and max value
+  """
+  def __init__(self, name, required=False, int_range=None,
+               conditional_props=None):
+    super(PropIntList, self).__init__(name, 'intlist', required,
+                                      conditional_props)
+    self.int_range = int_range
+
+  def Validate(self, val, prop):
+    """Check each item of the list with a range"""
+    if not self.str_pattern:
+      return
+    pattern = '^' + self.str_pattern + '$'
+    for int_val in prop.value:
+      try:
+        if self.int_range is not None:
+          # pylint: disable=unpacking-non-sequence
+          min_val, max_val = self.int_range
+          if int_val < min_val or int_val > max_val:
+            val.Fail(prop.node.path, "'%s' value '%s' is out of range [%g..%g]" %
+                    (prop.name, prop.value, min_val, max_val))
+
+      except ValueError:
+        val.Fail(prop.node.path, "'%s' value '%s' is not a float" %
+                (prop.name, prop.value))
+
 class PropFloat(PropDesc):
   """A floating-point property"""
   def __init__(self, name, required=False, float_range=None,
