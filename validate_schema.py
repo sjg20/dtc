@@ -12,6 +12,8 @@ from __future__ import print_function
 
 import re
 
+import fdt_util
+
 
 def CheckPhandleTarget(val, target, target_path_match):
   """Check that the target of a phandle matches a pattern
@@ -120,16 +122,16 @@ class PropInt(PropDesc):
   def Validate(self, val, prop):
     """Check that the value is an int"""
     try:
-      int_val = int(prop.value)
+      int_val = fdt_util.fdt32_to_cpu(prop.value)
       if self.int_range is not None:
         # pylint: disable=unpacking-non-sequence
         min_val, max_val = self.int_range
         if int_val < min_val or int_val > max_val:
           val.Fail(prop.node.path, "'%s' value '%s' is out of range [%g..%g]" %
-                   (prop.name, prop.value, min_val, max_val))
+                   (prop.name, int_val, min_val, max_val))
 
     except ValueError:
-      val.Fail(prop.node.path, "'%s' value '%s' is not a float" %
+      val.Fail(prop.node.path, "'%s' value '%s' is not an int" %
                (prop.name, prop.value))
 
 
@@ -149,14 +151,14 @@ class PropIntList(PropDesc):
 
   def Validate(self, val, prop):
     """Check each item of the list with a range"""
-    if not self.str_pattern:
+    if not self.int_range:
       return
-    pattern = '^' + self.str_pattern + '$'
     for int_val in prop.value:
       try:
         if self.int_range is not None:
           # pylint: disable=unpacking-non-sequence
           min_val, max_val = self.int_range
+          int_val = fdt_util.fdt32_to_cpu(int_val)
           if int_val < min_val or int_val > max_val:
             val.Fail(prop.node.path, "'%s' value '%s' is out of range [%g..%g]" %
                     (prop.name, prop.value, min_val, max_val))

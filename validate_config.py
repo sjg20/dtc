@@ -57,7 +57,7 @@ from validate_schema import NodeAny, NodeDesc, NodeModel, NodeSubmodel
 from validate_schema import PropCustom, PropDesc, PropString, PropStringList
 from validate_schema import PropPhandleTarget, PropPhandle, CheckPhandleTarget
 from validate_schema import PropAny, PropBool, PropFile, PropFloat, PropIntList
-
+from validate_schema import SchemaElement, PropInt
 
 def ParseArgv(argv):
   """Parse the available arguments.
@@ -293,20 +293,22 @@ class CrosConfigValidator(object):
     schema = None
     if 'compatible' in node.props:
       compats = node.props['compatible']
-      #print('compats', compats.value)
-      if not isinstance(compats, list):
-        compats = [compats]
+      if isinstance(compats.value, list):
+        compats = [c for c in compats.value]
+      else:
+        compats = [compats.value]
       for compat in compats:
         if compat in parent_schema:
           schema = parent_schema[compat]
-    else:
+      if schema is None:
+        print('No schema for: %s' % (', '.join(compats)))
+    elif isinstance(parent_schema, SchemaElement):
       schema = self.GetSchema(node, parent_schema)
-    if schema is None:
-      return
 
-    self._ValidateSchema(node, schema)
+    if schema:
+      self._ValidateSchema(node, schema)
     for subnode in node.subnodes.values():
-      self._ValidateTree(subnode, schema)
+      self._ValidateTree(subnode, schema or parent_schema)
 
   @staticmethod
   def ValidateSkuMap(val, prop):
@@ -438,7 +440,13 @@ hierarchical way.
 """
 SCHEMA = {
   'arm,pl310-cache': NodeDesc('/', True, [
+    PropStringList('compatible', True),
     PropIntList('arm,data-latency', True, [1, 256]),
+    PropIntList('arm,tag-latency', True, [1, 256]),
+    PropBool('cache-unified'),
+    PropInt('cache-level', True, [2, 2]),
+    PropInterrupts(),
+    PropReg(),
   ])
 }
 
