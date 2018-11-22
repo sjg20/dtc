@@ -110,6 +110,13 @@ static inline fdt64_t cpu_to_fdt64(uint64_t x)
 #undef CPU_TO_FDT16
 #undef EXTRACT_BYTE
 
+/* Functions and types marked deprecated */
+#if defined(LIBFDT_DEPRECATION_WARNINGS) && defined(__GNUC__)
+#define __deprecated __attribute__ ((deprecated))
+#else
+#define __deprecated
+#endif
+
 #ifdef __APPLE__
 #include <AvailabilityMacros.h>
 

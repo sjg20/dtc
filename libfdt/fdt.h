@@ -83,7 +83,7 @@ struct fdt_node_header {
 	char name[0];
 };
 
-struct fdt_property {
+struct __deprecated fdt_property {
 	fdt32_t tag;
 	fdt32_t len;
 	fdt32_t nameoff;

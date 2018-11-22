@@ -581,6 +581,9 @@ int fdt_next_property_offset(const void *fdt, int offset);
 
 /**
  * fdt_get_property_by_offset - retrieve the property at a given offset
+ *
+ * NOTE THIS FUNCTION IS DEPRECATED. Please use fdt_getprop_by_offset() instead.
+ *
  * @fdt: pointer to the device tree blob
  * @offset: offset of the property to retrieve
  * @lenp: pointer to an integer variable (will be overwritten) or NULL
@@ -608,10 +611,13 @@ int fdt_next_property_offset(const void *fdt, int offset);
  */
 const struct fdt_property *fdt_get_property_by_offset(const void *fdt,
 						      int offset,
-						      int *lenp);
+						      int *lenp) __deprecated;
 
 /**
  * fdt_get_property_namelen - find a property based on substring
+ *
+ * NOTE THIS FUNCTION IS DEPRECATED. Please use fdt_getprop_namelen() instead.
+ *
  * @fdt: pointer to the device tree blob
  * @nodeoffset: offset of the node whose property to find
  * @name: name of the property to find
@@ -625,11 +631,15 @@ const struct fdt_property *fdt_get_property_by_offset(const void *fdt,
 const struct fdt_property *fdt_get_property_namelen(const void *fdt,
 						    int nodeoffset,
 						    const char *name,
-						    int namelen, int *lenp);
+						    int namelen, int *lenp)
+						    __deprecated;
 #endif
 
 /**
  * fdt_get_property - find a given property in a given node
+ *
+ * NOTE THIS FUNCTION IS DEPRECATED. Please use fdt_getprop() instead.
+ *
  * @fdt: pointer to the device tree blob
  * @nodeoffset: offset of the node whose property to find
  * @name: name of the property to find
@@ -657,10 +667,10 @@ const struct fdt_property *fdt_get_property_namelen(const void *fdt,
  *		-FDT_ERR_TRUNCATED, standard meanings
  */
 const struct fdt_property *fdt_get_property(const void *fdt, int nodeoffset,
-					    const char *name, int *lenp);
-static inline struct fdt_property *fdt_get_property_w(void *fdt, int nodeoffset,
-						      const char *name,
-						      int *lenp)
+					    const char *name, int *lenp)
+					    __deprecated;
+static __deprecated inline struct fdt_property *fdt_get_property_w(void *fdt,
+			   int nodeoffset, const char *name, int *lenp)
 {
 	return (struct fdt_property *)(uintptr_t)
 		fdt_get_property(fdt, nodeoffset, name, lenp);

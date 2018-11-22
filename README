@@ -8,6 +8,20 @@ David Gibson <david@gibson.dropbear.id.au>
 Jon Loeliger <jdl@jdl.com>
 
 
+Deprecated functions (November 2018)
+------------------------------------
+
+In preparation for potential internal libfdt changes to support additional
+features, some API functions have been determined to be problematic. Currently
+the list includes those that return struct fdt_property, since this struct may
+not exist in future libfdt versions.
+
+Define LIBFDT_DEPRECATION_WARNINGS before including libfdt_env.h to generate
+gcc deprecation warnings for deprecated functions and types. Deprecated
+functions may not work in future libfdt versions. Deprecated types may become
+inaccessible.
+
+
 Python library
 --------------
 
