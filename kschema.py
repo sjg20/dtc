@@ -268,6 +268,15 @@ class PropPhandle(PropDesc):
                      (prop.name, target.path, self.target_compat))
 
 
+class PropReg(PropDesc):
+    """A 'reg' property
+
+    This holds register addresses
+    """
+    def __init__(self, required=False, cond_props=None):
+        super(PropDesc, self).__init__('reg', 'reg', required, cond_props)
+
+
 class PropCustom(PropDesc):
     """A custom property with its own validator
 
