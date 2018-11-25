@@ -53,7 +53,7 @@ import sys
 from chromite.lib import cros_build_lib
 
 import fdt, fdt_util
-from validate_schema import NodeAny, NodeDesc, NodeModel, NodeSubmodel
+from validate_schema import NodeAny, NodeDesc, NodeModel
 from validate_schema import PropCustom, PropDesc, PropString, PropStringList
 from validate_schema import PropPhandleTarget, PropPhandle, CheckPhandleTarget
 from validate_schema import PropAny, PropBool, PropFile, PropFloat, PropIntList

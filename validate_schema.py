@@ -354,15 +354,9 @@ class NodeDesc(SchemaElement):
 
 
 class NodeModel(NodeDesc):
-  """A generic node schema element (base class for nodes)"""
+  """A model (top-level node in DT)"""
   def __init__(self, elements):
     super(NodeModel, self).__init__('MODEL', elements=elements)
-
-
-class NodeSubmodel(NodeDesc):
-  """A generic node schema element (base class for nodes)"""
-  def __init__(self, elements):
-    super(NodeSubmodel, self).__init__('SUBMODEL', elements=elements)
 
 
 class NodeAny(NodeDesc):
