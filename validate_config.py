@@ -96,26 +96,35 @@ def ParseArgv(argv):
 
 class CrosConfigValidator(object):
     """Validator for the master configuration"""
-    def __init__(self, schema, raise_on_error, kernel):
+    def __init__(self, schema, raise_on_error, kernel, settings):
         """Master configuration validator.
 
         Properties:
             _errors: List of validation errors detected (each a string)
             _fdt: fdt.Fdt object containing device tree to validate
             _raise_on_error: True if the validator should raise on the first error
-                    (useful for debugging)
+                (useful for debugging)
             _kernel: True if we are performing validation for the kernel. This
-                    tries to automatically add the dt-bindings search path
+                tries to automatically add the dt-bindings search path
             model_list: List of model names found in the config
             submodel_list: Dict of submodel names found in the config:
-                    key: Model name
-                    value: List of submodel names
+                key: Model name
+                value: List of submodel names
+            _schema_by_path: Schema for each node path, used when the nodes does
+                not have a compatible string, but still needs schema. Dict:
+                    key: node Path
+                    value: List of NodeDesc objects
+            _settings: Global settings for validation, dict:
+                key: setting (e.g. '#arch')
+                value: value for that setting (e.g. 'armv8')
         """
         self._errors = []
         self._fdt = None
         self._raise_on_error = raise_on_error
         self._schema = schema
         self._kernel = kernel
+        self._schema_by_path = {}
+        self._settings = settings or {}
 
         # This iniital value matches the standard schema object. This is
         # overwritten by the real model list by Start().
@@ -132,6 +141,31 @@ class CrosConfigValidator(object):
         self._errors.append('%s: %s' % (location, msg))
         if self._raise_on_error:
             raise ValueError(self._errors[-1])
+
+    def _CheckCondition(self, name, value, node_target, schema_target):
+        if name.startswith('#'):
+            if name not in self._settings:
+                self.Fail(node_target.path, "Setting '%s' does not exist" %
+                          name)
+                return False
+            actual = self._settings[name]
+            if value.startswith('!'):
+                if value[1:] == actual:
+                    return False
+            elif value != actual:
+                return False
+            return True
+
+        while name.startswith('../'):
+            schema_target = schema_target.parent
+            node_target = node_target.parent
+            name = name[3:]
+        parent_props = [e.name for e in schema_target.elements]
+        sibling_names = node_target.props.keys()
+        sibling_names += [n.name for n in node_target.subnodes.values()]
+        if name in parent_props and value != (name in sibling_names):
+            return False
+        return True
 
     def ElementPresent(self, schema, parent_node):
         """Check whether a schema element should be present
@@ -151,18 +185,11 @@ class CrosConfigValidator(object):
         """
         if schema.conditional_props and parent_node:
             for rel_name, value in schema.conditional_props.iteritems():
-                name = rel_name
-                schema_target = schema.parent
-                node_target = parent_node
-                while name.startswith('../'):
-                    schema_target = schema_target.parent
-                    node_target = node_target.parent
-                    name = name[3:]
-                parent_props = [e.name for e in schema_target.elements]
-                sibling_names = node_target.props.keys()
-                sibling_names += [n.name for n in node_target.subnodes.values()]
-                if name in parent_props and value != (name in sibling_names):
+                if not self._CheckCondition(rel_name, value, parent_node,
+                                            schema.parent):
                     return False
+        elif schema.conditional_props:
+            print ('if schema.conditional_props')
         return True
 
     def GetElement(self, schema, name, node, expected=None):
@@ -312,9 +339,12 @@ class CrosConfigValidator(object):
         finally:
             sys.path = old_path
         schema = getattr(module, 'schema')
-        for node in schema:
-            for compat in node.compat:
-                self._schema[compat] = node
+        for element in schema:
+            if not element.compat:
+                self._schema_by_path[element.path] = element
+            else:
+                for compat in element.compat:
+                    self._schema[compat] = element
 
     def _LoadSchema(self, schema_path):
         """Obtain all the schema
@@ -337,6 +367,8 @@ class CrosConfigValidator(object):
             parent_schema: Schema for the parent node
         """
         schema = None
+
+        # Normal case: compatible string specifies the schema
         if 'compatible' in node.props:
             compats = node.props['compatible']
             if isinstance(compats.value, list):
@@ -349,6 +381,12 @@ class CrosConfigValidator(object):
             if schema is None:
                 #print('No schema for: %s' % (', '.join(compats)))
                 return
+
+        # Schema for some nodes is specified by their path (e.g. /cpu)
+        elif node.path in self._schema_by_path:
+            schema = self._schema_by_path[node.path]
+
+        # Schema may be in a child element of this schema
         elif isinstance(parent_schema, SchemaElement):
             schema = self.GetSchema(node, parent_schema)
 
@@ -538,7 +576,9 @@ def Main(argv=None):
     if argv is None:
         argv = sys.argv[1:]
     args = ParseArgv(argv)
-    validator = CrosConfigValidator(SCHEMA, args.raise_on_error, args.kernel)
+    settings = {'#arch': 'armv7'}
+    validator = CrosConfigValidator(SCHEMA, args.raise_on_error, args.kernel,
+                                    settings)
     found_errors = False
     try:
         # If we are given partial files (.dtsi) then we compile them all into one

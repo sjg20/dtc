@@ -86,7 +86,8 @@ class SchemaElement(object):
 class PropDesc(SchemaElement):
     """A generic property schema element (base class for properties)"""
     def __init__(self, name, prop_type, required=False, conditional_props=None):
-        super(PropDesc, self).__init__(name, prop_type, required, conditional_props)
+        super(PropDesc, self).__init__(name, prop_type, required,
+                                       conditional_props)
 
 
 class PropString(PropDesc):
@@ -98,7 +99,7 @@ class PropString(PropDesc):
     def __init__(self, name, required=False, str_pattern='',
                              conditional_props=None):
         super(PropString, self).__init__(name, 'string', required,
-                                                                         conditional_props)
+                                         conditional_props)
         self.str_pattern = str_pattern
 
     def Validate(self, val, prop):
@@ -367,6 +368,7 @@ class NodeModel(NodeDesc):
         self.name = name
         self.elements.append(PropString('model', True, name))
         self.elements.append(NodeAliases())
+        self.elements.append(NodeCpus())
 
 
 class NodeAliases(NodeDesc):
@@ -375,6 +377,22 @@ class NodeAliases(NodeDesc):
         super(NodeAliases, self).__init__('ALIAS', None)
         self.name = 'aliases'
         self.elements.append(PropAny())
+
+
+class NodeByPath(NodeDesc):
+    """A nde which is specified by path rather than compatible string"""
+    def __init__(self, path, elements):
+        super(NodeByPath, self).__init__('PATH-%s' % path, None,
+                                         elements=elements)
+        self.path = path
+
+
+class NodeCpus(NodeByPath):
+    """A /cpus node, containing information about CPUs"""
+    def __init__(self, elements=None):
+        super(NodeCpus, self).__init__('/cpus', elements)
+        self.name = 'cpus'
+
 
 class NodeAny(NodeDesc):
     """A generic node schema element (base class for nodes)"""
