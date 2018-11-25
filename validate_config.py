@@ -214,6 +214,8 @@ class CrosConfigValidator(object):
                 continue
             if element.name == name:
                 return element, True
+            #elif '@' in name and element.name == name.split('@')[0]:
+                #return element, True
             elif ((expected is None or expected == NodeDesc) and
                         isinstance(element, NodeAny)):
                 return element, True
@@ -314,7 +316,6 @@ class CrosConfigValidator(object):
             self.Fail(os.path.dirname(node.path),
                                 "Unexpected subnode '%s', valid list is (%s)" %
                                 (node.name, ', '.join(elements)))
-            print('schema', schema)
         return schema
 
     #def _LoadSchemaDir(self, schema_path):
@@ -361,6 +362,7 @@ class CrosConfigValidator(object):
             parent_schema: Schema for the parent node
         """
         schema = None
+        base_path = node.path.split('@')[0]
 
         # Normal case: compatible string specifies the schema
         if 'compatible' in node.props:
@@ -373,8 +375,8 @@ class CrosConfigValidator(object):
                 return
 
         # Schema for some nodes is specified by their path (e.g. /cpu)
-        elif node.path in self._schema_by_path:
-            schema = self._schema_by_path[node.path]
+        elif base_path in self._schema_by_path:
+            schema = self._schema_by_path[base_path]
 
         # Schema may be in a child element of this schema
         elif isinstance(parent_schema, SchemaElement):
@@ -385,9 +387,8 @@ class CrosConfigValidator(object):
 
         if schema:
             self._ValidateSchema(node, schema)
-
-        for subnode in node.subnodes.values():
-            self._ValidateTree(subnode, schema or parent_schema)
+            for subnode in node.subnodes.values():
+                self._ValidateTree(subnode, schema or parent_schema)
 
     @staticmethod
     def ValidateSkuMap(val, prop):

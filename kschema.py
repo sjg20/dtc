@@ -350,6 +350,7 @@ class NodeModel(NodeDesc):
         self.elements.append(NodeCpus())
         self.elements.append(NodeReservedMemory())
         self.elements.append(NodeThermalZones())
+        self.elements.append(NodeMemory())
 
 
 class NodeAliases(NodeDesc):
@@ -387,6 +388,13 @@ class NodeThermalZones(NodeByPath):
     def __init__(self, elements=None):
         super(NodeThermalZones, self).__init__('/thermal-zones', elements)
         self.name = 'thermal-zones'
+
+
+class NodeMemory(NodeByPath):
+    """A /memory node, containing information about memory areas"""
+    def __init__(self, elements=None):
+        super(NodeMemory, self).__init__('/memory', elements)
+        self.name = 'memory'
 
 
 class NodeAny(NodeDesc):
