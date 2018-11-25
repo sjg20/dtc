@@ -53,11 +53,11 @@ import sys
 from chromite.lib import cros_build_lib
 
 import fdt, fdt_util
-from validate_schema import NodeAny, NodeDesc, NodeModel
-from validate_schema import PropCustom, PropDesc, PropString, PropStringList
-from validate_schema import PropPhandleTarget, PropPhandle, CheckPhandleTarget
-from validate_schema import PropAny, PropBool, PropFile, PropFloat, PropIntList
-from validate_schema import SchemaElement, PropInt
+from kschema import NodeAny, NodeDesc, NodeModel
+from kschema import PropCustom, PropDesc, PropString, PropStringList
+from kschema import PropPhandleTarget, PropPhandle, CheckPhandleTarget
+from kschema import PropAny, PropBool, PropFile, PropFloat, PropIntList
+from kschema import SchemaElement, PropInt
 
 def ParseArgv(argv):
     """Parse the available arguments.
