@@ -342,6 +342,12 @@ class NodeDesc(SchemaElement):
                                        conditional_props)
         self.compat = compat
         self.elements = [] if elements is None else elements
+        if compat:
+            self.elements.append(PropStringList('compatible', True,
+                                                '|'.join(compat)))
+        self.elements.append(PropInt('#address-cells'))
+        self.elements.append(PropInt('#size-cells'))
+        self.elements.append(PropInt('interrupt-parent'))
         for element in self.elements:
             element.parent = self
 
@@ -359,7 +365,16 @@ class NodeModel(NodeDesc):
     def __init__(self, name, compat, elements=None):
         super(NodeModel, self).__init__('MODEL', compat, elements=elements)
         self.name = name
+        self.elements.append(PropString('model', True, name))
+        self.elements.append(NodeAliases())
 
+
+class NodeAliases(NodeDesc):
+    """An /aliases node, containing references to other nodes"""
+    def __init__(self):
+        super(NodeAliases, self).__init__('ALIAS', None)
+        self.name = 'aliases'
+        self.elements.append(PropAny())
 
 class NodeAny(NodeDesc):
     """A generic node schema element (base class for nodes)"""

@@ -347,7 +347,7 @@ class CrosConfigValidator(object):
                 if compat in self._schema:
                     schema = self._schema[compat]
             if schema is None:
-                print('No schema for: %s' % (', '.join(compats)))
+                #print('No schema for: %s' % (', '.join(compats)))
                 return
         elif isinstance(parent_schema, SchemaElement):
             schema = self.GetSchema(node, parent_schema)
