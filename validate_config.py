@@ -62,7 +62,7 @@ except:
 from chromite.lib import cros_build_lib
 
 import fdt, fdt_util
-from kschema import NodeAny, NodeDesc, NodeModel
+from kschema import NodeAny, NodeDesc, NodeModel, NodeByPath
 from kschema import PropCustom, PropDesc, PropString, PropStringList
 from kschema import PropPhandleTarget, PropPhandle, CheckPhandleTarget
 from kschema import PropAny, PropBool, PropFile, PropFloat, PropIntList
@@ -307,7 +307,7 @@ class CrosConfigValidator(object):
             Schema for the node, or None if none found
         """
         schema, needed = self.GetElement(parent_schema, node.name, node.parent,
-                                                                         NodeDesc)
+                                         NodeDesc)
         if not schema and needed:
             elements = [e.name for e in parent_schema.GetNodes()
                                     if self.ElementPresent(e, node.parent)]
@@ -377,9 +377,12 @@ class CrosConfigValidator(object):
         # Schema may be in a child element of this schema
         elif isinstance(parent_schema, SchemaElement):
             schema = self.GetSchema(node, parent_schema)
+            if isinstance(schema, NodeByPath):
+                self.Fail(node.path, 'No schema found for this path')
 
         if schema:
             self._ValidateSchema(node, schema)
+
         for subnode in node.subnodes.values():
             self._ValidateTree(subnode, schema or parent_schema)
 

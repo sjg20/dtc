@@ -348,6 +348,7 @@ class NodeModel(NodeDesc):
         self.elements.append(PropString('model', True, name))
         self.elements.append(NodeAliases())
         self.elements.append(NodeCpus())
+        self.elements.append(NodeReservedMemory())
 
 
 class NodeAliases(NodeDesc):
@@ -372,6 +373,12 @@ class NodeCpus(NodeByPath):
         super(NodeCpus, self).__init__('/cpus', elements)
         self.name = 'cpus'
 
+
+class NodeReservedMemory(NodeByPath):
+    """A //reserved-memory node, containing information about reserved memory"""
+    def __init__(self, elements=None):
+        super(NodeReservedMemory, self).__init__('/reserved-memory', elements)
+        self.name = 'reserved-memory'
 
 class NodeAny(NodeDesc):
     """A generic node schema element (base class for nodes)"""
