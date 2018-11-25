@@ -310,10 +310,11 @@ class CrosConfigValidator(object):
                                          NodeDesc)
         if not schema and needed:
             elements = [e.name for e in parent_schema.GetNodes()
-                                    if self.ElementPresent(e, node.parent)]
+                        if self.ElementPresent(e, node.parent)]
             self.Fail(os.path.dirname(node.path),
                                 "Unexpected subnode '%s', valid list is (%s)" %
                                 (node.name, ', '.join(elements)))
+            print('schema', schema)
         return schema
 
     #def _LoadSchemaDir(self, schema_path):
@@ -326,8 +327,9 @@ class CrosConfigValidator(object):
             else:
                 module = __import__(module_name)
         except ImportError as e:
+            raise
             raise ValueError("Bad schema module '%s', error '%s'" %
-                             (os.path.join(dirpath, module_name), dirpath))
+                             (os.path.join(dirpath, module_name), e))
         finally:
             sys.path = old_path
         schema = getattr(module, 'schema')
@@ -379,6 +381,7 @@ class CrosConfigValidator(object):
             schema = self.GetSchema(node, parent_schema)
             if isinstance(schema, NodeByPath):
                 self.Fail(node.path, 'No schema found for this path')
+                return
 
         if schema:
             self._ValidateSchema(node, schema)

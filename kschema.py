@@ -349,6 +349,7 @@ class NodeModel(NodeDesc):
         self.elements.append(NodeAliases())
         self.elements.append(NodeCpus())
         self.elements.append(NodeReservedMemory())
+        self.elements.append(NodeThermalZones())
 
 
 class NodeAliases(NodeDesc):
@@ -379,6 +380,14 @@ class NodeReservedMemory(NodeByPath):
     def __init__(self, elements=None):
         super(NodeReservedMemory, self).__init__('/reserved-memory', elements)
         self.name = 'reserved-memory'
+
+
+class NodeThermalZones(NodeByPath):
+    """A /cpus node, containing information about thermals"""
+    def __init__(self, elements=None):
+        super(NodeThermalZones, self).__init__('/thermal-zones', elements)
+        self.name = 'thermal-zones'
+
 
 class NodeAny(NodeDesc):
     """A generic node schema element (base class for nodes)"""
