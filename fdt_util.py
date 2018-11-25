@@ -148,3 +148,14 @@ def CompileAll(fnames):
     if out:
         os.unlink(out.name)
     return result
+
+
+def GetCompatibleList(node):
+    compats = node.props.get('compatible')
+    if compats is None:
+        return None
+    if isinstance(compats.value, list):
+        compats = [c for c in compats.value]
+    else:
+        compats = [compats.value]
+    return compats

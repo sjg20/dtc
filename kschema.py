@@ -15,40 +15,22 @@ import re
 import fdt_util
 
 
-def CheckPhandleTarget(val, target, target_path_match):
+def CheckPhandleTarget(val, target, target_compat):
     """Check that the target of a phandle matches a pattern
 
     Args:
         val: Validator (used for model list, etc.)
-        target: Target node path (string)
-        target_path_match: Match string. This is the full path to the node that the
-                target must point to. Some 'wildcard' nodes are supported in the path:
-
-                     MODEL - matches any model node
-                     SUBMODEL - matches any submodel when MODEL is earlier in the path
-                     ANY - matches any node
+        target: Target node (Node object)
+        target_compat: Match string. This is the compatible string that the
+            target must point to.
 
     Returns:
         True if the target matches, False if not
     """
-    model = None
-    parts = target_path_match.split('/')
-    target_parts = target.path.split('/')
-    ok = len(parts) == len(target_parts)
-    if ok:
-        for i, part in enumerate(parts):
-            if part == 'MODEL':
-                if target_parts[i] in val.model_list:
-                    model = target_parts[i]
-                    continue
-            if part == 'SUBMODEL' and model:
-                if target_parts[i] in val.submodel_list[model]:
-                    continue
-            elif part == 'ANY':
-                continue
-            if part != target_parts[i]:
-                ok = False
-    return ok
+    compats = fdt_util.GetCompatibleList(target)
+    if not compats:
+        return False
+    return target_compat in compats
 
 
 class SchemaElement(object):
@@ -58,16 +40,16 @@ class SchemaElement(object):
         name: Name of schema eleent
         prop_type: String describing this property type
         required: True if this element is mandatory, False if optional
-        conditional_props: Properties which control whether this element is present.
+        cond_props: Properties which control whether this element is present.
              Dict:
                  key: name of controlling property
                  value: True if the property must be present, False if it must be absent
     """
-    def __init__(self, name, prop_type, required=False, conditional_props=None):
+    def __init__(self, name, prop_type, required=False, cond_props=None):
         self.name = name
         self.prop_type = prop_type
         self.required = required
-        self.conditional_props = conditional_props
+        self.cond_props = cond_props
         self.parent = None
 
     def Validate(self, val, prop):
@@ -85,9 +67,8 @@ class SchemaElement(object):
 
 class PropDesc(SchemaElement):
     """A generic property schema element (base class for properties)"""
-    def __init__(self, name, prop_type, required=False, conditional_props=None):
-        super(PropDesc, self).__init__(name, prop_type, required,
-                                       conditional_props)
+    def __init__(self, name, prop_type, required=False, cond_props=None):
+        super(PropDesc, self).__init__(name, prop_type, required, cond_props)
 
 
 class PropString(PropDesc):
@@ -97,9 +78,9 @@ class PropString(PropDesc):
         str_pattern: Regex to use to validate the string
     """
     def __init__(self, name, required=False, str_pattern='',
-                             conditional_props=None):
+                             cond_props=None):
         super(PropString, self).__init__(name, 'string', required,
-                                         conditional_props)
+                                         cond_props)
         self.str_pattern = str_pattern
 
     def Validate(self, val, prop):
@@ -116,8 +97,8 @@ class PropString(PropDesc):
 class PropInt(PropDesc):
     """An integer property"""
     def __init__(self, name, required=False, int_range=None,
-                             conditional_props=None):
-        super(PropInt, self).__init__(name, 'int', required, conditional_props)
+                             cond_props=None):
+        super(PropInt, self).__init__(name, 'int', required, cond_props)
         self.int_range = int_range
 
     def Validate(self, val, prop):
@@ -145,9 +126,9 @@ class PropIntList(PropDesc):
         int_range: List: min and max value
     """
     def __init__(self, name, required=False, int_range=None,
-                             conditional_props=None):
+                             cond_props=None):
         super(PropIntList, self).__init__(name, 'intlist', required,
-                                                                            conditional_props)
+                                                                            cond_props)
         self.int_range = int_range
 
     def Validate(self, val, prop):
@@ -171,8 +152,8 @@ class PropIntList(PropDesc):
 class PropFloat(PropDesc):
     """A floating-point property"""
     def __init__(self, name, required=False, float_range=None,
-                             conditional_props=None):
-        super(PropFloat, self).__init__(name, 'float', required, conditional_props)
+                             cond_props=None):
+        super(PropFloat, self).__init__(name, 'float', required, cond_props)
         self.float_range = float_range
 
     def Validate(self, val, prop):
@@ -193,8 +174,8 @@ class PropFloat(PropDesc):
 
 class PropBool(PropDesc):
     """A boolean property"""
-    def __init__(self, name, conditional_props=None):
-        super(PropBool, self).__init__(name, 'bool', False, conditional_props)
+    def __init__(self, name, cond_props=None):
+        super(PropBool, self).__init__(name, 'bool', False, cond_props)
 
 
 class PropFile(PropDesc):
@@ -210,8 +191,8 @@ class PropFile(PropDesc):
                 relative to this.
     """
     def __init__(self, name, required=False, str_pattern='',
-                             conditional_props=None, target_dir=None):
-        super(PropFile, self).__init__(name, 'file', required, conditional_props)
+                             cond_props=None, target_dir=None):
+        super(PropFile, self).__init__(name, 'file', required, cond_props)
         self.str_pattern = str_pattern
         self.target_dir = target_dir
 
@@ -235,9 +216,9 @@ class PropStringList(PropDesc):
         str_pattern: Regex to use to validate the string
     """
     def __init__(self, name, required=False, str_pattern='',
-                             conditional_props=None):
+                             cond_props=None):
         super(PropStringList, self).__init__(name, 'stringlist', required,
-                                                                                 conditional_props)
+                                                                                 cond_props)
         self.str_pattern = str_pattern
 
     def Validate(self, val, prop):
@@ -257,9 +238,9 @@ class PropPhandleTarget(PropDesc):
 
     A phandle target can be pointed to by another node using a phandle property.
     """
-    def __init__(self, required=False, conditional_props=None):
+    def __init__(self, required=False, cond_props=None):
         super(PropPhandleTarget, self).__init__('phandle', 'phandle-target',
-                                                                                        required, conditional_props)
+                                                required, cond_props)
 
 
 class PropPhandle(PropDesc):
@@ -269,24 +250,22 @@ class PropPhandle(PropDesc):
     another.
 
     Properties:
-        target_path_match: String to use to validate the target of this phandle.
-                It is the full path to the node that it must point to. See
+        target_compat: String to use to validate the target of this phandle.
+                It is the compatible string that it must point to. See
                 CheckPhandleTarget for details.
     """
-    def __init__(self, name, target_path_match, required=False,
-                             conditional_props=None):
-        super(PropPhandle, self).__init__(name, 'phandle', required,
-                                                                            conditional_props)
-        self.target_path_match = target_path_match
+    def __init__(self, name, target_compat, required=False, cond_props=None):
+        super(PropPhandle, self).__init__(name, 'phandle', required, cond_props)
+        self.target_compat = target_compat
 
     def Validate(self, val, prop):
         """Check that this phandle points to the correct place"""
         phandle = prop.GetPhandle()
         target = prop.fdt.LookupPhandle(phandle)
-        if not CheckPhandleTarget(val, target, self.target_path_match):
-            val.Fail(prop.node.path, "Phandle '%s' targets node '%s' which does not "
-                             "match pattern '%s'" % (prop.name, target.path,
-                                                                             self.target_path_match))
+        if not CheckPhandleTarget(val, target, self.target_compat):
+            val.Fail(prop.node.path, "Phandle '%s' targets node '%s' which "
+                     "does not have compatible string  '%s'" %
+                     (prop.name, target.path, self.target_compat))
 
 
 class PropCustom(PropDesc):
@@ -295,9 +274,9 @@ class PropCustom(PropDesc):
     Properties:
         validator: Function to call to validate this property
     """
-    def __init__(self, name, validator, required=False, conditional_props=None):
+    def __init__(self, name, validator, required=False, cond_props=None):
         super(PropCustom, self).__init__(name, 'custom', required,
-                                                                         conditional_props)
+                                                                         cond_props)
         self.validator = validator
 
     def Validate(self, val, prop):
@@ -338,9 +317,9 @@ class PropAny(PropDesc):
 class NodeDesc(SchemaElement):
     """A generic node schema element (base class for nodes)"""
     def __init__(self, name, compat, required=False, elements=None,
-                             conditional_props=None):
+                             cond_props=None):
         super(NodeDesc, self).__init__(name, 'node', required,
-                                       conditional_props)
+                                       cond_props)
         self.compat = compat
         self.elements = [] if elements is None else elements
         if compat:

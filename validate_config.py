@@ -19,7 +19,7 @@ Schema elements can be optional or required. Optional elements will not cause
 a failure if the node does not include them.
 
 The presence or absense of a particular schema element can also be controlled
-by a 'conditional_props' option. This lists elements that must (or must not)
+by a 'cond_props' option. This lists elements that must (or must not)
 be present in the node for this element to be present. This provides some
 flexibility where the schema for a node has two options, for example, where
 the presence of one element conflicts with the presence of others.
@@ -160,17 +160,16 @@ class CrosConfigValidator(object):
             schema_target = schema_target.parent
             node_target = node_target.parent
             name = name[3:]
-        parent_props = [e.name for e in schema_target.elements]
-        sibling_names = node_target.props.keys()
-        sibling_names += [n.name for n in node_target.subnodes.values()]
-        if name in parent_props and value != (name in sibling_names):
-            return False
+        actual = node_target.props.get(name)
+        if actual is not None:
+            if actual.value != value:
+                return False
         return True
 
     def ElementPresent(self, schema, parent_node):
         """Check whether a schema element should be present
 
-        This handles the conditional_props feature. The list of names of sibling
+        This handles the cond_props feature. The list of names of sibling
         nodes/properties that are actually present is checked to see if any of them
         conflict with the conditional properties for this node. If there is a
         conflict, then this element is considered to be absent.
@@ -183,13 +182,13 @@ class CrosConfigValidator(object):
         Returns:
             True if this element is present, False if absent
         """
-        if schema.conditional_props and parent_node:
-            for rel_name, value in schema.conditional_props.iteritems():
+        if schema.cond_props and parent_node:
+            for rel_name, value in schema.cond_props.iteritems():
                 if not self._CheckCondition(rel_name, value, parent_node,
                                             schema.parent):
                     return False
-        elif schema.conditional_props:
-            print ('if schema.conditional_props')
+        elif schema.cond_props:
+            print ('if schema.cond_props')
         return True
 
     def GetElement(self, schema, name, node, expected=None):
@@ -198,7 +197,7 @@ class CrosConfigValidator(object):
         Args:
             schema: Schema element to check
             name: Name of element to find (string)
-            node: Node containing the property (or for nodes, the parent node
+            node: Node contaElementPresentining the property (or for nodes, the parent node
                     containing the subnode) we are looking up. None if none available
             expected: The SchemaElement object that is expected. This can be NodeDesc
                     if a node is expected, PropDesc if a property is expected, or None
@@ -215,13 +214,6 @@ class CrosConfigValidator(object):
                 continue
             if element.name == name:
                 return element, True
-            elif (self.model_list and isinstance(element, NodeModel) and
-                        name in self.model_list):
-                return element, True
-            elif self.submodel_list and isinstance(element, NodeSubmodel) and node:
-                m = re.match('/chromeos/models/([a-z0-9]+)/submodels', node.path)
-                if m and name in self.submodel_list[m.group(1)]:
-                    return element, True
             elif ((expected is None or expected == NodeDesc) and
                         isinstance(element, NodeAny)):
                 return element, True
@@ -370,11 +362,7 @@ class CrosConfigValidator(object):
 
         # Normal case: compatible string specifies the schema
         if 'compatible' in node.props:
-            compats = node.props['compatible']
-            if isinstance(compats.value, list):
-                compats = [c for c in compats.value]
-            else:
-                compats = [compats.value]
+            compats = fdt_util.GetCompatibleList(node)
             for compat in compats:
                 if compat in self._schema:
                     schema = self._schema[compat]
