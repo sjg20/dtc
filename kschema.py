@@ -341,8 +341,8 @@ class NodeDesc(SchemaElement):
         super(NodeDesc, self).__init__(name, 'node', required,
                                        conditional_props)
         self.compat = compat
-        self.elements = elements
-        for element in elements or []:
+        self.elements = [] if elements is None else elements
+        for element in self.elements:
             element.parent = self
 
     def GetNodes(self):

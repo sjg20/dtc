@@ -50,6 +50,15 @@ import os
 import re
 import sys
 
+# importlib was introduced in Python 2.7 but there was a report of it not
+# working in 2.7.12, so we work around this:
+# http://lists.denx.de/pipermail/u-boot/2016-October/269729.html
+try:
+    import importlib
+    have_importlib = True
+except:
+    have_importlib = False
+
 from chromite.lib import cros_build_lib
 
 import fdt, fdt_util
@@ -288,6 +297,38 @@ class CrosConfigValidator(object):
                                 (node.name, ', '.join(elements)))
         return schema
 
+    #def _LoadSchemaDir(self, schema_path):
+    def _ImportSchemaFile(self, dirpath, module_name):
+        old_path = sys.path
+        sys.path.insert(0, dirpath)
+        try:
+            if have_importlib:
+                module = importlib.import_module(module_name)
+            else:
+                module = __import__(module_name)
+        except ImportError as e:
+            raise ValueError("Bad schema module '%s', error '%s'" %
+                             (os.path.join(dirpath, module_name), dirpath))
+        finally:
+            sys.path = old_path
+        schema = getattr(module, 'schema')
+        for node in schema:
+            for compat in node.compat:
+                self._schema[compat] = node
+
+    def _LoadSchema(self, schema_path):
+        """Obtain all the schema
+
+        Args:
+            schema_path: Root path to look for Python files
+        """
+        #self._LoadSchemaDir(schema_path)
+        for (dirpath, dirnames, fnames) in os.walk(schema_path):
+            for fname in fnames:
+                base, ext = os.path.splitext(fname)
+                if ext == '.py' and not base.startswith('_'):
+                    self._ImportSchemaFile(dirpath, base)
+
     def _ValidateTree(self, node, parent_schema):
         """Validate a node and all its subnodes recursively
 
@@ -303,10 +344,10 @@ class CrosConfigValidator(object):
             else:
                 compats = [compats.value]
             for compat in compats:
-                if compat in parent_schema:
-                    schema = parent_schema[compat]
-            if schema is None:
-                print('No schema for: %s' % (', '.join(compats)))
+                if compat in self._schema:
+                    schema = self._schema[compat]
+            #if schema is None:
+                #print('No schema for: %s' % (', '.join(compats)))
         elif isinstance(parent_schema, SchemaElement):
             schema = self.GetSchema(node, parent_schema)
 
@@ -387,6 +428,9 @@ class CrosConfigValidator(object):
                         search_paths.append(os.path.join(pathname, 'include'))
 
                 dtb, tmpfile = fdt_util.EnsureCompiled(fnames[0], search_paths)
+                schema_path = os.path.join(pathname, 'Documentation',
+                        'devicetree', 'bindings')
+                self._LoadSchema(schema_path)
             self.Prepare(fdt.FdtScan(dtb))
 
             self._ValidateTree(self._fdt.GetRoot(), self._schema)
@@ -454,7 +498,8 @@ possibly with properties and subnodes.
 In this way it is possible to describe the schema in a fairly natural,
 hierarchical way.
 """
-SCHEMA = {
+SCHEMA = {}
+'''
     'arm,pl310-cache': NodeDesc('/', True, [
         PropStringList('compatible', True),
         PropIntList('arm,data-latency', True, [1, 256]),
@@ -465,6 +510,7 @@ SCHEMA = {
         #PropReg(),
     ])
 }
+'''
 
 def ShowErrors(fname, errors):
     """Show validation errors
