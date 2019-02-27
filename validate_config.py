@@ -352,6 +352,7 @@ class CrosConfigValidator(object):
             for fname in fnames:
                 base, ext = os.path.splitext(fname)
                 if ext == '.py' and not base.startswith('_'):
+                    #print("Importing '%s/%s'" % (dirpath, fname))
                     self._ImportSchemaFile(dirpath, base)
 
     def _ValidateTree(self, node, parent_schema):
@@ -365,25 +366,28 @@ class CrosConfigValidator(object):
         base_path = node.path.split('@')[0]
 
         # Normal case: compatible string specifies the schema
+        compats = []
         if 'compatible' in node.props:
             compats = fdt_util.GetCompatibleList(node)
             for compat in compats:
                 if compat in self._schema:
                     schema = self._schema[compat]
-            if schema is None:
-                #print('No schema for: %s' % (', '.join(compats)))
-                return
 
         # Schema for some nodes is specified by their path (e.g. /cpu)
         elif base_path in self._schema_by_path:
             schema = self._schema_by_path[base_path]
+            #print(self._schema_by_path)
 
         # Schema may be in a child element of this schema
         elif isinstance(parent_schema, SchemaElement):
             schema = self.GetSchema(node, parent_schema)
             if isinstance(schema, NodeByPath):
-                self.Fail(node.path, 'No schema found for this path')
+                self.Fail(node.path, 'No schema found for this path %s' % schema)
                 return
+
+        if schema is None:
+            print('No schema for: %s' % (', '.join(compats)))
+            #return
 
         if schema:
             self._ValidateSchema(node, schema)

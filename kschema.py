@@ -218,7 +218,7 @@ class PropStringList(PropDesc):
     def __init__(self, name, required=False, str_pattern='',
                              cond_props=None):
         super(PropStringList, self).__init__(name, 'stringlist', required,
-                                                                                 cond_props)
+                                             cond_props)
         self.str_pattern = str_pattern
 
     def Validate(self, val, prop):
@@ -226,7 +226,8 @@ class PropStringList(PropDesc):
         if not self.str_pattern:
             return
         pattern = '^' + self.str_pattern + '$'
-        for item in prop.value:
+        value = prop.value if isinstance(prop.value, list) else [prop.value]
+        for item in value:
             m = re.match(pattern, item)
             if not m:
                 val.Fail(prop.node.path, "'%s' value '%s' does not match pattern '%s'" %
@@ -356,10 +357,11 @@ class NodeModel(NodeDesc):
         self.name = name
         self.elements.append(PropString('model', True, name))
         self.elements.append(NodeAliases())
-        self.elements.append(NodeCpus())
+        #self.elements.append(NodeCpus())
         self.elements.append(NodeReservedMemory())
         self.elements.append(NodeThermalZones())
         self.elements.append(NodeMemory())
+        self.elements.append(NodeChosen())
 
 
 class NodeAliases(NodeDesc):
@@ -385,6 +387,13 @@ class NodeCpus(NodeByPath):
         self.name = 'cpus'
 
 
+class NodeCpu(NodeDesc):
+    """A cpu node, containing information about a CPU"""
+    def __init__(self, compat, elements=None):
+        super(NodeCpu, self).__init__('CPU', compat, elements=elements)
+        self.name = 'cpu'
+
+
 class NodeReservedMemory(NodeByPath):
     """A //reserved-memory node, containing information about reserved memory"""
     def __init__(self, elements=None):
@@ -406,10 +415,17 @@ class NodeMemory(NodeByPath):
         self.name = 'memory'
 
 
+class NodeChosen(NodeByPath):
+    """A /chosen node, containing information about chosen options"""
+    def __init__(self, elements=None):
+        super(NodeChosen, self).__init__('/chosen', elements)
+        self.name = 'chosen'
+
+
 class NodeAny(NodeDesc):
-    """A generic node schema element (base class for nodes)"""
+    """A node schema element that matches a name pattern"""
     def __init__(self, name_pattern, elements):
-        super(NodeAny, self).__init__('ANY', elements=elements)
+        super(NodeAny, self).__init__('ANY', None, elements=elements)
         self.name_pattern = name_pattern
 
     def Validate(self, val, node):
