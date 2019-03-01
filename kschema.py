@@ -287,6 +287,22 @@ class PropClocks(PropDesc):
         super(PropDesc, self).__init__('clocks', 'clocks', required, cond_props)
 
 
+class PropRegEx(PropDesc):
+    """A property with a name matching a given pattern
+    """
+    def __init__(self):
+        super(PropRegEx, self).__init__('REGEX', 'regex')
+
+
+class PropSupply(PropRegEx):
+    """A regulator supply property
+
+    This holds information about regulators used by this node
+    """
+    def __init__(self, root_name, required=False, cond_props=None):
+        super(PropSupply, self).__init__(root_name, required, cond_props)
+
+
 class PropCustom(PropDesc):
     """A custom property with its own validator
 

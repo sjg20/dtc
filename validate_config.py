@@ -125,6 +125,7 @@ class CrosConfigValidator(object):
         self._kernel = kernel
         self._schema_by_path = {}
         self._settings = settings or {}
+        self._imported_elments = []
 
         # This iniital value matches the standard schema object. This is
         # overwritten by the real model list by Start().
@@ -318,8 +319,7 @@ class CrosConfigValidator(object):
                                 (node.name, ', '.join(elements)))
         return schema
 
-    #def _LoadSchemaDir(self, schema_path):
-    def _ImportSchemaFile(self, dirpath, module_name):
+    def _ImportSchemaFile(self, dirpath, module_name, priority):
         old_path = sys.path
         sys.path.insert(0, dirpath)
         try:
@@ -333,17 +333,55 @@ class CrosConfigValidator(object):
                              (os.path.join(dirpath, module_name), e))
         finally:
             sys.path = old_path
-        schema = getattr(module, 'schema')
+        attr_name = 'schema%d' % priority if priority else 'schema'
+        schema = getattr(module, attr_name, None)
+        if not schema:
+            return False
         for element in schema:
+            bad = False
+            # Most elements have a list of compatible strings for which they
+            # provide the schema.
             if element.compat:
                 for compat in element.compat:
                     self._schema[compat] = element
+
+            # Some elements have no compatible string, but relate to a
+            # particular path in the DT.
             elif hasattr(element, 'path'):
                 self._schema_by_path[element.path] = element
-            else:
-                self.Fail("Module '%s', element '%s'" %
-                          (module_name, element.name),
+
+            # Or perhaps we have an additional piece of schema which needs to
+            # be merged with an existing element.
+            elif priority:
+                bad = True
+                for orig in self._imported_elments:
+                    if isinstance(element, type(orig)):
+                        print("found '%s' for '%s'" % (orig.name, element.name))
+                        for elem in element.elements:
+                            orig.elements.append(elem)
+                        bad = False
+                        element = None  # Don't record this additive element
+                        break
+
+            # Or maybe there has just been some mistake
+            if bad:
+                self.Fail("Module '%s', var '%s', element '%s'" %
+                          (module_name, attr_name, element.name),
                           'Node must have compatible string or path')
+            if element:
+                self._imported_elments.append(element)
+
+        return True
+
+    def _GetSchemaFiles(self, schema_path):
+        file_list = []
+        for (dirpath, dirnames, fnames) in os.walk(schema_path):
+            for fname in fnames:
+                base, ext = os.path.splitext(fname)
+                if ext == '.py' and not base.startswith('_'):
+                    #print("Importing '%s/%s'" % (dirpath, fname))
+                    file_list.append([dirpath, base])
+        return file_list
 
     def _LoadSchema(self, schema_path):
         """Obtain all the schema
@@ -351,13 +389,17 @@ class CrosConfigValidator(object):
         Args:
             schema_path: Root path to look for Python files
         """
-        #self._LoadSchemaDir(schema_path)
-        for (dirpath, dirnames, fnames) in os.walk(schema_path):
-            for fname in fnames:
-                base, ext = os.path.splitext(fname)
-                if ext == '.py' and not base.startswith('_'):
-                    #print("Importing '%s/%s'" % (dirpath, fname))
-                    self._ImportSchemaFile(dirpath, base)
+        remaining_list = self._GetSchemaFiles(schema_path)
+        priority = 0
+        while remaining_list:
+            leftover = []
+            for dirpath, base in remaining_list:
+                if not self._ImportSchemaFile(dirpath, base, priority):
+                    leftover.append([dirpath, base])
+            remaining_list = leftover
+            priority += 1
+            if priority > 9:
+                self.Fail('Cannot locate schema in files: %s' % reamining_list)
 
     def _ValidateTree(self, node, parent_schema):
         """Validate a node and all its subnodes recursively
