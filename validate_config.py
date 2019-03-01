@@ -335,11 +335,15 @@ class CrosConfigValidator(object):
             sys.path = old_path
         schema = getattr(module, 'schema')
         for element in schema:
-            if not element.compat:
-                self._schema_by_path[element.path] = element
-            else:
+            if element.compat:
                 for compat in element.compat:
                     self._schema[compat] = element
+            elif hasattr(element, 'path'):
+                self._schema_by_path[element.path] = element
+            else:
+                self.Fail("Module '%s', element '%s'" %
+                          (module_name, element.name),
+                          'Node must have compatible string or path')
 
     def _LoadSchema(self, schema_path):
         """Obtain all the schema

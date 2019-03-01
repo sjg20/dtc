@@ -278,6 +278,15 @@ class PropReg(PropDesc):
         super(PropDesc, self).__init__('reg', 'reg', required, cond_props)
 
 
+class PropClocks(PropDesc):
+    """A 'clocks' property
+
+    This holds information about clocks used by this node
+    """
+    def __init__(self, required=False, cond_props=None):
+        super(PropDesc, self).__init__('clocks', 'clocks', required, cond_props)
+
+
 class PropCustom(PropDesc):
     """A custom property with its own validator
 
@@ -357,7 +366,6 @@ class NodeModel(NodeDesc):
         self.name = name
         self.elements.append(PropString('model', True, name))
         self.elements.append(NodeAliases())
-        #self.elements.append(NodeCpus())
         self.elements.append(NodeReservedMemory())
         self.elements.append(NodeThermalZones())
         self.elements.append(NodeMemory())
