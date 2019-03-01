@@ -52,6 +52,9 @@ class SchemaElement(object):
         self.cond_props = cond_props
         self.parent = None
 
+    def NameMatches(self, name):
+        return self.name == name
+
     def Validate(self, val, prop):
         """Validate the schema element against the given property.
 
@@ -290,8 +293,12 @@ class PropClocks(PropDesc):
 class PropRegEx(PropDesc):
     """A property with a name matching a given pattern
     """
-    def __init__(self):
-        super(PropRegEx, self).__init__('REGEX', 'regex')
+    def __init__(self, regex, required=False, cond_props=None):
+        super(PropRegEx, self).__init__(regex, 'regex')
+        self.regex = regex
+
+    def NameMatches(self, name):
+        return re.match(self.regex, name) is not None
 
 
 class PropSupply(PropRegEx):
@@ -300,7 +307,8 @@ class PropSupply(PropRegEx):
     This holds information about regulators used by this node
     """
     def __init__(self, root_name, required=False, cond_props=None):
-        super(PropSupply, self).__init__(root_name, required, cond_props)
+        super(PropSupply, self).__init__('%s[0-9]-supply' % root_name, required,
+                                         cond_props)
 
 
 class PropCustom(PropDesc):

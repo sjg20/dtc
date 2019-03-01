@@ -213,7 +213,7 @@ class CrosConfigValidator(object):
         for element in schema.elements:
             if not self.ElementPresent(element, node):
                 continue
-            if element.name == name:
+            if element.NameMatches(name):
                 return element, True
             #elif '@' in name and element.name == name.split('@')[0]:
                 #return element, True
@@ -356,7 +356,7 @@ class CrosConfigValidator(object):
                 bad = True
                 for orig in self._imported_elments:
                     if isinstance(element, type(orig)):
-                        print("found '%s' for '%s'" % (orig.name, element.name))
+                        #print("found '%s' for '%s'" % (orig.name, element.name))
                         for elem in element.elements:
                             orig.elements.append(elem)
                         bad = False
