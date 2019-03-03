@@ -311,6 +311,17 @@ class PropSupply(PropRegEx):
                                          cond_props)
 
 
+class PropGpios(PropDesc):
+    """A GPIO list property
+
+    This holds a list of GPIOs used by this node
+    """
+    def __init__(self, root_name, count=None, required=False, cond_props=None):
+        super(PropGpios, self).__init__('%s-gpios' % root_name, required,
+                                        cond_props)
+        self.count = count
+
+
 class PropCustom(PropDesc):
     """A custom property with its own validator
 

@@ -95,29 +95,28 @@ def ParseArgv(argv):
 
 
 class CrosConfigValidator(object):
-    """Validator for the master configuration"""
-    def __init__(self, schema, raise_on_error, kernel, settings):
-        """Master configuration validator.
+    """Validator for the master configuration
 
-        Properties:
-            _errors: List of validation errors detected (each a string)
-            _fdt: fdt.Fdt object containing device tree to validate
-            _raise_on_error: True if the validator should raise on the first error
-                (useful for debugging)
-            _kernel: True if we are performing validation for the kernel. This
-                tries to automatically add the dt-bindings search path
-            model_list: List of model names found in the config
-            submodel_list: Dict of submodel names found in the config:
-                key: Model name
-                value: List of submodel names
-            _schema_by_path: Schema for each node path, used when the nodes does
-                not have a compatible string, but still needs schema. Dict:
-                    key: node Path
-                    value: List of NodeDesc objects
-            _settings: Global settings for validation, dict:
-                key: setting (e.g. '#arch')
-                value: value for that setting (e.g. 'armv8')
-        """
+    Properties:
+        _errors: List of validation errors detected (each a string)
+        _fdt: fdt.Fdt object containing device tree to validate
+        _raise_on_error: True if the validator should raise on the first error
+            (useful for debugging)
+        _kernel: True if we are performing validation for the kernel. This
+            tries to automatically add the dt-bindings search path
+        model_list: List of model names found in the config
+        submodel_list: Dict of submodel names found in the config:
+            key: Model name
+            value: List of submodel names
+        _schema_by_path: Schema for each node path, used when the nodes does
+            not have a compatible string, but still needs schema. Dict:
+                key: node Path
+                value: List of NodeDesc objects
+        _settings: Global settings for validation, dict:
+            key: setting (e.g. '#arch')
+            value: value for that setting (e.g. 'armv8')
+    """
+    def __init__(self, schema, raise_on_error, kernel, settings):
         self._errors = []
         self._fdt = None
         self._raise_on_error = raise_on_error
@@ -333,6 +332,8 @@ class CrosConfigValidator(object):
                              (os.path.join(dirpath, module_name), e))
         finally:
             sys.path = old_path
+        if getattr(module, 'no_schema', None):
+            return None
         attr_name = 'schema%d' % priority if priority else 'schema'
         schema = getattr(module, attr_name, None)
         if not schema:
@@ -355,7 +356,8 @@ class CrosConfigValidator(object):
             elif priority:
                 bad = True
                 for orig in self._imported_elments:
-                    if isinstance(element, type(orig)):
+                    if (orig.name == element.name and
+                            isinstance(element, type(orig))):
                         #print("found '%s' for '%s'" % (orig.name, element.name))
                         for elem in element.elements:
                             orig.elements.append(elem)
@@ -394,12 +396,16 @@ class CrosConfigValidator(object):
         while remaining_list:
             leftover = []
             for dirpath, base in remaining_list:
-                if not self._ImportSchemaFile(dirpath, base, priority):
+                loaded = self._ImportSchemaFile(dirpath, base, priority)
+                if loaded == False:
                     leftover.append([dirpath, base])
             remaining_list = leftover
             priority += 1
             if priority > 9:
-                self.Fail('Cannot locate schema in files: %s' % reamining_list)
+                self.Fail(schema_path,
+                          'Cannot locate schema in files: %s' %
+                          ', '.join([fname for fname, name in remaining_list]))
+                break
 
     def _ValidateTree(self, node, parent_schema):
         """Validate a node and all its subnodes recursively
