@@ -58,9 +58,30 @@ class BindingConverter(object):
         self._raise_on_error = raise_on_error
         self._infd = None
         self._outfd = None
+        self._indent = 0
+        self._line = None
+
+    def PeekLine(self):
+        if self._line is None:
+            self._line = self._infd.readline()
+        rest = self._line.lstrip()
+        indent = 0
+        chars = len(self._line) - len(rest)        
+        for ch in self._line[:chars]:
+            if ch == '\t':
+                indent += 8
+            else:
+                indent += 1
+        self._indent = indent
+        return self._line.strip()
+
+    def ConsumeLine(self):
+        self._line = None
 
     def GetLine(self):
-        return self._infd.readline().strip()
+        line = self.PeekLine()
+        self.ConsumeLine()
+        return line
 
     def GetPara(self):
         para = []
@@ -70,6 +91,21 @@ class BindingConverter(object):
                 break
             para.append(line)
         return '\n'.join(para)
+
+    def GetOption(self):
+        opt = []
+        line = self.GetLine()
+        if line[0:2] != '* ':
+            self.Raise("Expected '* ' at start of option line '%s'" % line)
+        opt.append(line)
+        indent = self._indent
+        while True:
+            line = self.PeekLine()
+            if not line or self._indent <= indent:
+                break
+            opt.append(line)
+            self.ConsumeLine()
+        return '\n'.join(opt)
 
     def Raise(self, msg):
         print('State %d: Error: %s' % (self._state, msg), file=sys.stderr)
@@ -114,7 +150,7 @@ class BindingConverter(object):
                 else:
                     self.Raise("Unknown property name '%s'" % prop)
             elif self._state == S_COMPAT:
-                pass
+                option = self.GetOption()
 
 
         print('# SPDX-License-Identifier: GPL-2.0+', file=outfd)
