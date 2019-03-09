@@ -11,6 +11,7 @@ not, please send a patch.
 from __future__ import print_function
 
 import argparse
+from collections import namedtuple
 import os
 import sys
 
@@ -19,9 +20,11 @@ import sys
     S_TAG,      # Tag indicating next section, followed by ':'
     S_END,      # End of file
     S_PROP,     # Property (required or optional)
-    S_COMPAT,   # Compatible string
-    S_NEXT,     # Determine state by the line contents
-)= range(6)
+    S_COMPAT,   # Property definition
+    S_OPTIONS,  # Property options
+    S_EXAMPLE,  # Example(s) of how to use the binding
+    S_NEXT,     # Determine self._state by the line contents
+)= range(9)
 
 STATE_NAME = {
     S_NAME: 'name',
@@ -29,8 +32,15 @@ STATE_NAME = {
     S_TAG: 'tag',
     S_PROP: 'prop',
     S_COMPAT: 'compat',
+    S_OPTIONS: 'options',
+    S_EXAMPLE: 'example',
     S_NEXT: 'next',
 }
+
+StackItem = namedtuple('StackItem', ['indent', 'state'])
+
+# Indent expected for child items
+INDENT_DELTA = 8
 
 
 def ParseArgv(argv):
@@ -68,8 +78,9 @@ class BindingConverter(object):
         self._raise_on_error = raise_on_error
         self._infd = None
         self._outfd = None
-        self._indent = 0
         self._line = None
+        self._stack = []
+        self._state = None
 
     def PeekLine(self):
         if self._line is None:
@@ -122,11 +133,80 @@ class BindingConverter(object):
                                           msg), file=sys.stderr)
         sys.exit(1)
 
+    def PushState(self, indent):
+        self._stack.insert(0, StackItem(indent, self._state))
+
+    def PopState(self, line):
+        if not self._stack:
+            self.Raise("Stack underflow at '%s'" % line)
+        item = self._stack.pop()
+        return item.indent, item.state
+
     def Process(self, infd, outfd):
         self._infd = infd
         self._outfd = outfd
 
         self._state = S_NAME
+        name = ''
+        desc = []
+        base_indent = 0
+        required = False  # Property is mandatory (else optional)
+        for linenum, line in enumerate(infd.read().splitlines()):
+            rest = line.lstrip()
+            indent = 0
+            chars = len(line) - len(rest)
+            for ch in line[:chars]:
+                if ch == '\t':
+                    indent += 8
+                else:
+                    indent += 1
+
+            if line and indent < base_indent:
+                base_indent, self._state = self.PopState(line)
+
+            tag = None
+            if line:
+                if not indent and line[-1] == ':':
+                    tag = line[:-1]
+                elif rest[0:2] == '- ':
+                    pass
+
+            if tag:
+                self.PushState(indent)
+                if tag == 'Required properties':
+                    required = True
+                    self._state = S_PROP
+                elif tag == 'Optional properties':
+                    required = False
+                    self._state = S_PROP
+                elif tag in ['Example', 'Examples']:
+                    self._state = S_EXAMPLE
+                else:
+                    self.Raise("Unknonwn property in '%s'" % line)
+                base_indent += INDENT_DELTA
+                continue
+
+            if self._state == S_NAME:
+                if indent:
+                    self.Warn("Expected name to unindented (indent=%d, line='%s')"
+                              % (indent, line))
+                name = self.GetLine()
+                self._state = S_DESC
+            elif self._state == S_DESC:
+                # Ignore blank line at start
+                if desc or line:
+                    desc.append(line)
+            elif self._state == S_PROP:
+                if rest[0:2] != '- ':
+                    self.Raise("Expected '- ' at start of prop line '%s'" %
+                               line)
+                pos = rest.find(':')
+                if pos == -1:
+                    self.Raise("Expected ':' at end prop name '%s'" % line)
+                prop = rest[2:pos]
+                self._state = S_OPTIONS
+
+        '''
         while self._state != S_END:
             if self._state == S_NAME:
                 name = self.GetLine()
@@ -164,8 +244,7 @@ class BindingConverter(object):
                 option = self.GetOption()
                 self._state = S_NEXT
             elif self._state == S_NEXT:
-                
-
+        '''
 
         print('# SPDX-License-Identifier: GPL-2.0+', file=outfd)
         print('#', file=outfd)
@@ -178,7 +257,7 @@ class BindingConverter(object):
         print("    NodeDesc('regulator-fixed', ['regulator-fixed'], False, [",
               file=outfd)
         print('        ],', file=outfd)
-        print("        desc='%s')" % desc, file=outfd)
+        print("        desc='%s')" % '\n'.join(desc), file=outfd)
         print('    ]', file=outfd)
 
     def Convert(self, fname):
