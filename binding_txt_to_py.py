@@ -20,7 +20,17 @@ import sys
     S_END,      # End of file
     S_PROP,     # Property (required or optional)
     S_COMPAT,   # Compatible string
+    S_NEXT,     # Determine state by the line contents
 )= range(6)
+
+STATE_NAME = {
+    S_NAME: 'name',
+    S_DESC: 'desc',
+    S_TAG: 'tag',
+    S_PROP: 'prop',
+    S_COMPAT: 'compat',
+    S_NEXT: 'next',
+}
 
 
 def ParseArgv(argv):
@@ -108,7 +118,8 @@ class BindingConverter(object):
         return '\n'.join(opt)
 
     def Raise(self, msg):
-        print('State %d: Error: %s' % (self._state, msg), file=sys.stderr)
+        print('State %d/%s: Error: %s' % (self._state, STATE_NAME[self._state],
+                                          msg), file=sys.stderr)
         sys.exit(1)
 
     def Process(self, infd, outfd):
@@ -151,6 +162,9 @@ class BindingConverter(object):
                     self.Raise("Unknown property name '%s'" % prop)
             elif self._state == S_COMPAT:
                 option = self.GetOption()
+                self._state = S_NEXT
+            elif self._state == S_NEXT:
+                
 
 
         print('# SPDX-License-Identifier: GPL-2.0+', file=outfd)
