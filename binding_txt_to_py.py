@@ -11,7 +11,7 @@ not, please send a patch.
 from __future__ import print_function
 
 import argparse
-from collections import namedtuple
+from collections import namedtuple, OrderedDict
 import os
 import sys
 
@@ -22,9 +22,10 @@ import sys
     S_PROP,     # Property (required or optional)
     S_COMPAT,   # Property definition
     S_OPTIONS,  # Property options
+    S_OPTION,   # A single option of many
     S_EXAMPLE,  # Example(s) of how to use the binding
     S_NEXT,     # Determine self._state by the line contents
-)= range(9)
+)= range(10)
 
 STATE_NAME = {
     S_NAME: 'name',
@@ -33,11 +34,14 @@ STATE_NAME = {
     S_PROP: 'prop',
     S_COMPAT: 'compat',
     S_OPTIONS: 'options',
+    S_OPTION: 'option',
     S_EXAMPLE: 'example',
     S_NEXT: 'next',
 }
 
 StackItem = namedtuple('StackItem', ['indent', 'state'])
+#Property = namedtuple('Property', ['name', 'required', 'compatible'])
+
 
 # Indent expected for child items
 INDENT_DELTA = 8
@@ -67,6 +71,30 @@ def ParseArgv(argv):
     return parser.parse_args(argv)
 
 
+class Property:
+    def __init__(self, name, required, desc):
+        self.name = name
+        self.required = required
+        self.desc = desc
+        self.options = []
+
+    def GetValue(self):
+        val = []
+        for opt in self.options:
+            val.append(opt.name)
+        return val
+
+class Option:
+    def __init__(self, name, desc):
+        if name.startswith('"'):
+            name = name[1:-1]
+        self.name = name
+        self.desc = [desc]
+
+    def AddDesc(self, desc):
+        self.desc.append(desc)
+
+
 class BindingConverter(object):
     """Converter for binding files
 
@@ -81,13 +109,14 @@ class BindingConverter(object):
         self._line = None
         self._stack = []
         self._state = None
+        self._props = OrderedDict()
 
     def PeekLine(self):
         if self._line is None:
             self._line = self._infd.readline()
         rest = self._line.lstrip()
         indent = 0
-        chars = len(self._line) - len(rest)        
+        chars = len(self._line) - len(rest)
         for ch in self._line[:chars]:
             if ch == '\t':
                 indent += 8
@@ -134,7 +163,7 @@ class BindingConverter(object):
         sys.exit(1)
 
     def PushState(self, indent):
-        self._stack.insert(0, StackItem(indent, self._state))
+        self._stack.append(StackItem(indent, self._state))
 
     def PopState(self, line):
         if not self._stack:
@@ -152,6 +181,9 @@ class BindingConverter(object):
         base_indent = 0
         required = False  # Property is mandatory (else optional)
         for linenum, line in enumerate(infd.read().splitlines()):
+            print('State %d/%s: %s' % (self._state, STATE_NAME[self._state],
+                                       line))
+
             rest = line.lstrip()
             indent = 0
             chars = len(line) - len(rest)
@@ -161,15 +193,22 @@ class BindingConverter(object):
                 else:
                     indent += 1
 
-            if line and indent < base_indent:
-                base_indent, self._state = self.PopState(line)
+            if line:
+                while indent < base_indent:
+                    print('pop indent=%d, base=%d' % (indent, base_indent))
+                    base_indent, self._state = self.PopState(line)
+                    print('State %d/%s: %s' % (self._state,
+                                               STATE_NAME[self._state], line))
+                    print('indent=%d, new base=%d' % (indent, base_indent))
 
             tag = None
-            if line:
-                if not indent and line[-1] == ':':
-                    tag = line[:-1]
-                elif rest[0:2] == '- ':
-                    pass
+            if not line:
+                continue
+
+            if not indent and line[-1] == ':':
+                tag = line[:-1]
+            elif rest[0:2] == '- ':
+                pass
 
             if tag:
                 self.PushState(indent)
@@ -203,48 +242,28 @@ class BindingConverter(object):
                 pos = rest.find(':')
                 if pos == -1:
                     self.Raise("Expected ':' at end prop name '%s'" % line)
-                prop = rest[2:pos]
-                self._state = S_OPTIONS
+                prop_name = rest[2:pos]
 
-        '''
-        while self._state != S_END:
-            if self._state == S_NAME:
-                name = self.GetLine()
-                self._state = S_DESC
-            elif self._state == S_DESC:
-                desc = self.GetPara()
-                self._state = S_TAG
-            elif self._state == S_TAG:
-                tag = self.GetLine()
-                if not tag:
-                    break
-                if tag[-1] != ':':
-                    self.Raise("Expected ':' at end of tag line '%s'" % tag)
-                tag = tag[:-1]
-                if tag == 'Required properties':
-                    self.required = True
-                    self._state = S_PROP
-                elif tag == 'Optional properties':
-                    self.required = False
-                    self._state = S_PROP
-            elif self._state == S_PROP:
-                line = self.GetLine()
-                if line[0:2] != '- ':
-                    self.Raise("Expected '- ' at start of prop line '%s'" %
-                               line)
-                pos = line.find(':')
-                if pos == -1:
-                    self.Raise("Expected ':' at end prop name '%s'" % line)
-                prop = line[2:pos]
-                if prop == 'compatible':
-                    self._state = S_COMPAT
-                else:
-                    self.Raise("Unknown property name '%s'" % prop)
-            elif self._state == S_COMPAT:
-                option = self.GetOption()
-                self._state = S_NEXT
-            elif self._state == S_NEXT:
-        '''
+                self.PushState(indent)
+                self._state = S_OPTIONS
+                prop = Property(prop_name, required, rest[pos:])
+                self._props[prop_name] = prop
+                base_indent += 2
+            elif self._state == S_OPTIONS:
+                if rest[0:2] == '* ':
+                    pos = rest.find(':')
+                    if pos == -1:
+                        self.Raise("Expected ':' at end of option name '%s'" % line)
+                    opt_name = rest[2:pos]
+
+                    self.PushState(indent)
+                    self._state = S_OPTION
+                    opt = Option(opt_name, rest[pos:])
+                    prop.options.append(opt)
+                    print(prop.options)
+                    base_indent += 2
+            elif self._state == S_OPTION:
+                opt.AddDesc(rest)
 
         print('# SPDX-License-Identifier: GPL-2.0+', file=outfd)
         print('#', file=outfd)
@@ -254,8 +273,12 @@ class BindingConverter(object):
         print('from kschema import NodeDesc', file=outfd)        
         print(file=outfd)
         print('schema = [', file=outfd)
-        print("    NodeDesc('regulator-fixed', ['regulator-fixed'], False, [",
+        compat_str = "', '".join(self._props['compatible'].GetValue())
+        print("    NodeDesc('regulator-fixed', ['%s'], False, [" % compat_str,
               file=outfd)
+        for prop in self._props.values():
+            req_str = ', required=True' if prop.required else ''
+            print("        PropDesc('%s'%s)," % (prop.name, req_str), file=outfd)
         print('        ],', file=outfd)
         print("        desc='%s')" % '\n'.join(desc), file=outfd)
         print('    ]', file=outfd)
