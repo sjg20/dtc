@@ -181,8 +181,8 @@ class BindingConverter(object):
         base_indent = 0
         required = False  # Property is mandatory (else optional)
         for linenum, line in enumerate(infd.read().splitlines()):
-            print('State %d/%s: %s' % (self._state, STATE_NAME[self._state],
-                                       line))
+            #print('State %d/%s: %s' % (self._state, STATE_NAME[self._state],
+                                       #line))
 
             rest = line.lstrip()
             indent = 0
@@ -195,17 +195,17 @@ class BindingConverter(object):
 
             if line:
                 while indent < base_indent:
-                    print('pop indent=%d, base=%d' % (indent, base_indent))
+                    #print('pop indent=%d, base=%d' % (indent, base_indent))
                     base_indent, self._state = self.PopState(line)
-                    print('State %d/%s: %s' % (self._state,
-                                               STATE_NAME[self._state], line))
-                    print('indent=%d, new base=%d' % (indent, base_indent))
+                    #print('State %d/%s: %s' % (self._state,
+                                               #STATE_NAME[self._state], line))
+                    #print('indent=%d, new base=%d' % (indent, base_indent))
 
             tag = None
-            if not line:
-                continue
+            #if not line:
+                #continue
 
-            if not indent and line[-1] == ':':
+            if not indent and line and line[-1] == ':':
                 tag = line[:-1]
             elif rest[0:2] == '- ':
                 pass
@@ -260,7 +260,7 @@ class BindingConverter(object):
                     self._state = S_OPTION
                     opt = Option(opt_name, rest[pos:])
                     prop.options.append(opt)
-                    print(prop.options)
+                    #print(prop.options)
                     base_indent = indent + 2
                 else:
                     prop.desc.append(rest)
@@ -286,7 +286,7 @@ class BindingConverter(object):
             print("            desc='%s')," % desc, file=outfd)
             #for opt in prop.options:
                 #print(opt.name, opt.desc, file=outfd)
-        print('        ],', file=outfd)
+        print('        ]),', file=outfd)
         #print("        desc='%s')" % '\n'.join(desc), file=outfd)
         print('    ]', file=outfd)
 
