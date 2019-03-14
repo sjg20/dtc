@@ -211,7 +211,7 @@ class BindingConverter(object):
                 pass
 
             if tag:
-                self.PushState(indent)
+                self.PushState(base_indent)
                 if tag == 'Required properties':
                     required = True
                     self._state = S_PROP
@@ -244,7 +244,7 @@ class BindingConverter(object):
                     self.Raise("Expected ':' at end prop name '%s'" % line)
                 prop_name = rest[2:pos]
 
-                self.PushState(indent)
+                self.PushState(base_indent)
                 self._state = S_OPTIONS
                 prop = Property(prop_name, required, rest[pos:])
                 self._props[prop_name] = prop
@@ -256,7 +256,7 @@ class BindingConverter(object):
                         self.Raise("Expected ':' at end of option name '%s'" % line)
                     opt_name = rest[2:pos]
 
-                    self.PushState(indent)
+                    self.PushState(base_indent)
                     self._state = S_OPTION
                     opt = Option(opt_name, rest[pos:])
                     prop.options.append(opt)
