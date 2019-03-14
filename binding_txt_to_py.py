@@ -75,7 +75,7 @@ class Property:
     def __init__(self, name, required, desc):
         self.name = name
         self.required = required
-        self.desc = desc
+        self.desc = [desc]
         self.options = []
 
     def GetValue(self):
@@ -246,7 +246,7 @@ class BindingConverter(object):
 
                 self.PushState(base_indent)
                 self._state = S_OPTIONS
-                prop = Property(prop_name, required, rest[pos:])
+                prop = Property(prop_name, required, rest[pos + 2:])
                 self._props[prop_name] = prop
                 base_indent += 2
             elif self._state == S_OPTIONS:
@@ -261,7 +261,9 @@ class BindingConverter(object):
                     opt = Option(opt_name, rest[pos:])
                     prop.options.append(opt)
                     print(prop.options)
-                    base_indent += 2
+                    base_indent = indent + 2
+                else:
+                    prop.desc.append(rest)
             elif self._state == S_OPTION:
                 opt.AddDesc(rest)
 
@@ -278,9 +280,14 @@ class BindingConverter(object):
               file=outfd)
         for prop in self._props.values():
             req_str = ', required=True' if prop.required else ''
-            print("        PropDesc('%s'%s)," % (prop.name, req_str), file=outfd)
+            desc = "'\n                '".join(prop.desc)
+            print("        PropDesc('%s'%s," % (prop.name, req_str, ),
+                  file=outfd)
+            print("            desc='%s')," % desc, file=outfd)
+            #for opt in prop.options:
+                #print(opt.name, opt.desc, file=outfd)
         print('        ],', file=outfd)
-        print("        desc='%s')" % '\n'.join(desc), file=outfd)
+        #print("        desc='%s')" % '\n'.join(desc), file=outfd)
         print('    ]', file=outfd)
 
     def Convert(self, fname):
