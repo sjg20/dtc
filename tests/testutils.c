@@ -261,7 +261,6 @@ void vg_prepare_blob(void *fdt, size_t bufsize)
 
 	VALGRIND_MAKE_MEM_UNDEFINED(blob, bufsize);
 	VALGRIND_MAKE_MEM_DEFINED(blob, FDT_V1_SIZE);
-	VALGRIND_MAKE_MEM_DEFINED(blob, fdt_header_size(fdt));
 
 	if (fdt_magic(fdt) == FDT_MAGIC) {
 		off_strings = fdt_off_dt_strings(fdt);
