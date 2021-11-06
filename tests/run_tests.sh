@@ -1032,6 +1032,112 @@ pylibfdt_tests () {
     tot_tests=$((tot_tests + $total_tests))
 }
 
+# Check the number of lines generated matches what we expect
+# Args:
+#   $1: Expected number of lines
+#   $2...: Command line to run to generate output
+check_lines() {
+    local base="$1"
+
+    shift
+    lines=$($@ | wc -l)
+    if [ "$base" != "$lines" ]; then
+	echo "Expected $base lines but got $lines lines"
+	false
+    fi
+}
+
+# Check the number of bytes generated matches what we expect
+# Args:
+#   $1: Expected number of bytes
+#   $2...: Command line to run to generate output
+check_bytes() {
+    local base="$1"
+
+    shift
+    bytes=$($@ | wc -c)
+    if [ "$base" != "$bytes" ]; then
+	echo "Expected $base bytes but got $bytes bytes"
+	false
+    fi
+}
+
+# Check that $2 and $3 are equal. $1 is the test name to display
+equal_test () {
+    echo -n "$1:	"
+    if [ "$2" == "$3" ]; then
+	PASS
+    else
+	FAIL "$2 != $3"
+    fi
+}
+
+fdtgrep_tests () {
+    local all_lines        # Total source lines in .dts file
+    local dt_start
+    local lines
+    local node_lines       # Number of lines of 'struct' output
+    local tmp
+
+    tmp=/tmp/tests.$$
+
+    # Test up the test file
+    dts=grep.dts
+    dtb=grep.dtb
+    run_dtc_test -O dtb -p 0x1000 -o $dtb $dts
+
+    # Count the number of lines in the source file and the number of lines
+    # that don't relate to nodes (i.e. the SPDX and /dts-v1/ lines)
+    all_lines=$(cat $dts | wc -l)
+    node_lines=$(($all_lines - 2))
+
+    # Tests for each argument are roughly in alphabetical order
+
+    # Test -n
+    run_wrap_test check_lines 0 $DTGREP -n // $dtb
+
+    run_wrap_test check_lines 0 $DTGREP -n chosen $dtb
+    run_wrap_test check_lines 0 $DTGREP -n holiday $dtb
+    run_wrap_test check_lines 0 $DTGREP -n \"\" $dtb
+    run_wrap_test check_lines 6 $DTGREP -n /chosen $dtb
+    run_wrap_test check_lines 7 $DTGREP -n /holiday $dtb
+    run_wrap_test check_lines 11 $DTGREP -n /chosen -n /holiday $dtb
+
+    # Using -n and -N together is undefined, so we don't have tests for that
+    # The same applies for -p/-P
+    run_wrap_error_test $DTGREP -n chosen -N holiday $dtb
+    run_wrap_error_test $DTGREP -p chosen -P holiday $dtb
+
+    # Test -o: this should output just the .dts file to a file
+    # Where there is non-dts output it should go to stdout
+    rm -f $tmp
+    run_wrap_test check_lines 0 $DTGREP $dtb -o $tmp
+    run_wrap_test check_lines $node_lines cat $tmp
+
+    # Test -p: we get the nodes containing these properties
+    run_wrap_test check_lines 6 $DTGREP -p compatible -n / $dtb
+    run_wrap_test check_lines 5 $DTGREP -p bootargs -n / $dtb
+
+    # Now similar tests for -P
+    # First get the number of property lines (containing '=')
+    lines=$(grep "=" $dts |wc -l)
+    run_wrap_test check_lines $(($node_lines - 2)) $DTGREP -P compatible \
+	-n // $dtb
+    run_wrap_test check_lines $(($node_lines - 1)) $DTGREP -P bootargs \
+	-n // $dtb
+    run_wrap_test check_lines $(($node_lines - 3)) $DTGREP -P compatible \
+	-P bootargs -n // $dtb
+
+    # Now some dtb tests. The dts tests above have tested the basic grepping
+    # features so we only need to concern ourselves with things that are
+    # different about dtb/bin output.
+
+    # An empty node list should just give us just the FDT_END tag
+    run_wrap_test check_bytes 4 $DTGREP -n // -O bin $dtb
+
+    rm -f $tmp
+}
+
 while getopts "vt:me" ARG ; do
     case $ARG in
 	"v")
@@ -1050,7 +1156,7 @@ while getopts "vt:me" ARG ; do
 done
 
 if [ -z "$TESTSETS" ]; then
-    TESTSETS="libfdt utilfdt dtc dtbs_equal fdtget fdtput fdtdump fdtoverlay"
+    TESTSETS="libfdt utilfdt dtc dtbs_equal fdtget fdtput fdtdump fdtoverlay fdtgrep"
 
     # Test pylibfdt if the libfdt Python module is available.
     if ! $no_python; then
@@ -1089,6 +1195,9 @@ for set in $TESTSETS; do
 	    ;;
         "fdtoverlay")
 	    fdtoverlay_tests
+	    ;;
+	"fdtgrep")
+	    fdtgrep_tests
 	    ;;
     esac
 done

@@ -27,6 +27,7 @@ DTGET=${TEST_BINDIR}/fdtget
 DTPUT=${TEST_BINDIR}/fdtput
 FDTDUMP=${TEST_BINDIR}/fdtdump
 FDTOVERLAY=${TEST_BINDIR}/fdtoverlay
+DTGREP=${TEST_BINDIR}/fdtgrep
 
 verbose_run () {
     if [ -z "$QUIET_TEST" ]; then
