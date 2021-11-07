@@ -760,3 +760,35 @@ create/delete nodes and delete properties.
 For the first usage, the command line arguments are joined together into a
 single value which is written to the property. The -t option is required so
 that fdtput knows how to decode its arguments.
+
+
+6) fdtgrep - Grep device tree binaries for nodes or properties
+
+This is useful for finding a node/property in a devicetree and just showing
+that:
+
+    $ fdtgrep -n /chosen file.dtb
+    chosen {
+        stdout-path = "/serial@f00:115200";
+    };
+
+This tool also supports outputting in binary format. This is useful for hashing
+parts of the devicetree, since it outputs just those parts that are selected.
+This binary output can be run through a hashing tool for use in signature
+verification, for example. It is not intended for producing valid dtb files
+(future work will provide this).
+
+The syntax of the fdtgrep is:
+
+    fdtgrep <options> <dt file>|-
+
+Options are:
+
+  -n, --include-node <arg>   Node to include in grep
+  -N, --exclude-node <arg>   Node to exclude in grep
+  -p, --include-prop <arg>   Property to include in grep
+  -P, --exclude-prop <arg>   Property to exclude in grep
+  -o, --out <arg>            -o <output file>
+  -O, --out-format <arg>     -O <output format>
+  -h, --help                 Print this help and exit
+  -V, --version              Print version and exit

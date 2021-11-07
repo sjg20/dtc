@@ -29,3 +29,9 @@ FDTOVERLAY_SRCS = \
 	util.c
 
 FDTOVERLAY_OBJS = $(FDTOVERLAY_SRCS:%.c=%.o)
+
+FDTGREP_SRCS = \
+	fdtgrep.c \
+	util.c
+
+FDTGREP_OBJS = $(FDTGREP_SRCS:%.c=%.o)

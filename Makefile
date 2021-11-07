@@ -148,6 +148,7 @@ BIN += fdtdump
 BIN += fdtget
 BIN += fdtput
 BIN += fdtoverlay
+BIN += fdtgrep
 
 SCRIPTS = dtdiff
 
@@ -184,6 +185,7 @@ ifneq ($(MAKECMDGOALS),libfdt)
 -include $(FDTGET_OBJS:%.o=%.d)
 -include $(FDTPUT_OBJS:%.o=%.d)
 -include $(FDTOVERLAY_OBJS:%.o=%.d)
+-include $(FDTGREP_OBJS:%.o=%.d)
 endif
 endif
 
@@ -267,6 +269,8 @@ fdtput:	$(FDTPUT_OBJS) $(LIBFDT_lib)
 
 fdtoverlay: $(FDTOVERLAY_OBJS) $(LIBFDT_lib)
 
+fdtgrep: $(FDTGREP_OBJS) $(LIBFDT_lib)
+
 dist:
 	git archive --format=tar --prefix=dtc-$(dtc_version)/ HEAD \
 		> ../dtc-$(dtc_version).tar
@@ -317,6 +321,7 @@ TESTS_BIN += fdtput
 TESTS_BIN += fdtget
 TESTS_BIN += fdtdump
 TESTS_BIN += fdtoverlay
+TESTS_BIN += fdtgrep
 ifeq ($(NO_PYTHON),0)
 TESTS_PYLIBFDT += maybe_pylibfdt
 endif

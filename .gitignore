@@ -16,6 +16,7 @@ lex.yy.c
 /fdtget
 /fdtput
 /fdtoverlay
+/fdtgrep
 /patches
 /.pc
 
