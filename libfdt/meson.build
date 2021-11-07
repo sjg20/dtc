@@ -9,6 +9,7 @@ sources = files(
   'fdt_check.c',
   'fdt_empty_tree.c',
   'fdt_overlay.c',
+  'fdt_region.c',
   'fdt_ro.c',
   'fdt_rw.c',
   'fdt_strerror.c',

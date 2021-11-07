@@ -106,7 +106,12 @@ extern "C" {
 	/* FDT_ERR_ALIGNMENT: The device tree base address is not 8-byte
 	 * aligned. */
 
-#define FDT_ERR_MAX		19
+#define FDT_ERR_TOODEEP		20
+	/* FDT_ERR_TOODEEP: The depth of a node has exceeded the internal
+	 * libfdt limit. This can happen if you have more than
+	 * FDT_MAX_DEPTH nested nodes. */
+
+#define FDT_ERR_MAX		20
 
 /* constants */
 #define FDT_MAX_PHANDLE 0xfffffffe
@@ -2121,6 +2126,222 @@ int fdt_overlay_apply(void *fdt, void *fdto);
 /**********************************************************************/
 
 const char *fdt_strerror(int errval);
+
+#ifndef SWIG /* Regions are not yet supported in Python */
+
+/*
+ * The following struction are for for internal libfdt use. Callers may use
+ * struct fdt_region_state for the purpose of allocating a struct to pass to
+ * fdt_first_region()/
+ *
+ * This is to avoid calling malloc(), or requiring libfdt to return the number
+ * of bytes needed for this struct.
+ */
+
+/**
+ * struct fdt_region - A region within the device tree
+ *
+ * @offset: Start offset in bytes from the start of the device tree
+ * @size: Size in bytes
+ */
+struct fdt_region {
+	int offset;
+	int size;
+};
+
+#define FDT_ANY_GLOBAL			(FDT_IS_NODE | FDT_IS_PROP)
+#define FDT_IS_ANY			0x3		/* all the above */
+
+/* We set a reasonable limit on the number of nested nodes */
+#define FDT_MAX_DEPTH			32
+
+/* Decribes what we want to include from the current tag */
+enum want_t {
+	WANT_NOTHING,
+	WANT_NODES_ONLY,		/* No properties */
+	WANT_NODES_AND_PROPS,		/* Everything for one level */
+};
+
+/* Keeps track of the state at parent nodes */
+struct fdt_subnode_stack {
+	int offset;		/* Offset of node */
+	enum want_t want;	/* The 'want' value here */
+	int included;		/* 1 if we included this node, 0 if not */
+};
+
+/* enum fdt_region_done_t - current state of progress through the dtb */
+enum fdt_region_done_t {
+	FDT_DONE_NOTHING,		/* Working on 'struct' region */
+	FDT_DONE_STRUCT,		/* Finished the 'struct' region */
+	FDT_DONE_END,			/* Finished the 'end' tag */
+};
+
+/* struct fdt_region_ptrs - Keeps track of all the position pointers */
+struct fdt_region_ptrs {
+	int depth;			/* Current tree depth */
+	enum fdt_region_done_t done;	/* What we have completed scanning */
+	enum want_t want;		/* What we are currently including */
+	char *end;			/* Pointer to end of full node path */
+	int nextoffset;			/* Next node offset to check */
+};
+
+/* The state of our finding algortihm */
+struct fdt_region_state {
+	struct fdt_subnode_stack stack[FDT_MAX_DEPTH];	/* node stack */
+	struct fdt_region *region;	/* Contains list of regions found */
+	int count;			/* Numnber of regions found */
+	const void *fdt;		/* FDT blob */
+	int max_regions;		/* Maximum regions to find */
+	int can_merge;		/* 1 if we can merge with previous region */
+	int start;			/* Start position of current region */
+	struct fdt_region_ptrs ptrs;	/* Pointers for what we are up to */
+
+	/* These hold information passed in to fdt_first_region(): */
+	int flags;
+	char *path;
+	int path_len;
+};
+
+/*
+ * Flags for region finding
+ *
+ * Add all supernodes of a matching node/property, useful for creating a
+ * valid subset tree
+ */
+#define FDT_REG_SUPERNODES		(1 << 0)
+
+/* Indicates what an fdt part is (node, property) in call to fdt_region_func */
+#define FDT_IS_NODE			(1 << 0)
+#define FDT_IS_PROP			(1 << 1)
+
+/**
+ * fdt_region_func: Determine whether to include a part or not
+ *
+ * This function is provided by the caller to fdt_first/next_region(). It is
+ * called repeatedly for each device tree element to find out whether it should
+ * be included or not. Every node will generate a call with @type == FDT_IS_NODE
+ * and every property will generate a call with @type = FDT_IS_PROP
+ *
+ * @priv: Private pointer as passed to fdt_find_regions()
+ * @fdt: Pointer to FDT blob
+ * @offset: Offset of this node / property
+ * @type: Type of this part, FDT_IS_...
+ * @data: Pointer to data (full path of node / property name)
+ * @size: Size of data (length of node path / property including \0 terminator
+ * @return 0 to exclude, 1 to include, -1 if no information is available
+ */
+typedef int (*fdt_region_func)(void *priv, const void *fdt, int offset,
+			       int type, const char *data, int size);
+
+/**
+ * fdt_first_region() - find regions in device tree
+ *
+ * Given a nodes and properties to include and properties to exclude, find
+ * the regions of the device tree which describe those included parts.
+ *
+ * The use for this function is twofold. Firstly it provides a convenient
+ * way of performing a structure-aware grep of the tree. For example it is
+ * possible to grep for a node and get all the properties associated with
+ * that node. Trees can be subsetted easily, by specifying the nodes that
+ * are required, and then writing out the regions returned by this function.
+ * This is useful for small resource-constrained systems, such as boot
+ * loaders, which want to use an FDT but do not need to know about all of
+ * it.
+ *
+ * Secondly it makes it easy to hash parts of the tree and detect changes.
+ * The intent is to get a list of regions which will be invariant provided
+ * those parts are invariant. For example, if you request a list of regions
+ * for all nodes but exclude the property "data", then you will get the
+ * same region contents regardless of any change to "data" properties.
+ *
+ * This function can be used to produce a byte-stream to send to a hashing
+ * function to verify that critical parts of the FDT have not changed.
+ * Note that semantically null changes in order could still cause false
+ * hash misses. Such reordering might happen if the tree is regenerated
+ * from source, and nodes are reordered (the bytes-stream will be emitted
+ * in a different order and many hash functions will detect this). However
+ * if an existing tree is modified using libfdt functions, such as
+ * fdt_add_subnode() and fdt_setprop(), then this problem is avoided.
+ *
+ * The nodes/properties to include/exclude are defined by a function
+ * provided by the caller. This function is called for each node and
+ * property, and must return:
+ *
+ *    0 - to exclude this part
+ *    1 - to include this part
+ *   -1 - for FDT_IS_PROP only: no information is available, so include
+ *		if its containing node is included
+ *
+ * The last case is only used to deal with properties. Often a property is
+ * included if its containing node is included - this is the case where
+ * -1 is returned.. However if the property is specifically required to be
+ * included/excluded, then 0 or 1 can be returned. Note that including a
+ * property when the FDT_REG_SUPERNODES flag is given will force its
+ * containing node to be included since it is not valid to have a property
+ * that is not in a node.
+ *
+ * Using the information provided, the inclusion of a node can be controlled
+ * either by a node name or its compatible string, or any other property
+ * that the function can determine.
+ *
+ * As an example, including node "/" means to include the root node and all
+ * root properties. A flag provides a way of also including supernodes (of
+ * which there is none for the root node), and another flag includes
+ * immediate subnodes, so in this case we would get the FDT_BEGIN_NODE and
+ * FDT_END_NODE of all subnodes of /.
+ *
+ * The subnode feature helps in a hashing situation since it prevents the
+ * root node from changing at all. Any change to non-excluded properties,
+ * names of subnodes or number of subnodes would be detected.
+ *
+ * When used with Flat Image Trees (FITs) this provides the ability to hash and
+ * sign parts of * the FIT based on different configurations in the FIT. Then it
+ * is * impossible to change anything about that configuration (include images
+ * attached to the configuration), but it may be possible to add new
+ * configurations, new images or new signatures within the existing
+ * framework.
+ *
+ * The device tree header is not included in the region list. Since the
+ * contents of the FDT are changing (shrinking, often), the caller will need
+ * to regenerate the header anyway.
+ *
+ * @fdt:	Device tree to check
+ * @h_include:	Function to call to determine whether to include a part or
+ *		not
+ * @priv:	Private pointer passed to h_include
+ * @region:	Returns first region found
+ * @path:	Pointer to a temporary string for the function to use for
+ *		building path names
+ * @path_len:	Length of path, must be large enough to hold the longest
+ *		path in the tree
+ * @flags:	Various flags that control the region algortihm, see
+ *		FDT_REG_...
+ * @return 0, on success
+ *	-FDT_ERR_BADSTRUCTURE (too deep or more END tags than BEGIN tags
+ *	-FDT_ERR_BADLAYOUT
+ *	-FDT_ERR_NOSPACE (path area is too small)
+ *	-FDT_ERR_TOODEEP if the tree is too deep
+ */
+int fdt_first_region(const void *fdt, fdt_region_func h_include,
+		     void *priv, struct fdt_region *region,
+		     char *path, int path_len, int flags,
+		     struct fdt_region_state *info);
+
+/** fdt_next_region() - find next region
+ *
+ * See fdt_first_region() for full description. This function finds the
+ * next region according to the provided parameters, which must be the same
+ * as passed to fdt_first_region().
+ *
+ * The flags value is used unchanged from the call to fdt_first_region().
+ *
+ * This function can additionally return -FDT_ERR_NOTFOUND when there are no
+ * more regions
+ */
+int fdt_next_region(const void *fdt, fdt_region_func h_include,
+		    void *priv, struct fdt_region *region,
+		    struct fdt_region_state *info);
+#endif /* SWIG */
 
 #ifdef __cplusplus
 }
