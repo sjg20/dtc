@@ -496,6 +496,40 @@ class PyLibfdtBasicTests(unittest.TestCase):
         self.assertEqual(TEST_STRING_3,
                           self.fdt.getprop(node, prop).as_str())
 
+    def testSetPropU32(self):
+        """Test that we can update and create integer properties"""
+        node = 0
+        prop = 'prop-int'
+        self.fdt.setprop_u32(node, prop, TEST_VALUE_1)
+        self.assertEqual(struct.pack('>I', TEST_VALUE_1),
+                          self.fdt.getprop(node, prop))
+
+    def testSetPropBool(self):
+        """Test that we can update and create boolean properties"""
+        node = 0
+        prop = 'prop-bool'
+
+        # Check adding where there is no space
+        self.assertFalse(self.fdt2.hasprop(node, 'missing'))
+        self.assertEqual(
+            -libfdt.NOSPACE,
+            self.fdt2.setprop_bool(node, 'missing', True,
+                                   quiet=(libfdt.NOSPACE,)))
+        self.assertFalse(self.fdt2.hasprop(node, 'missing'))
+
+        # Trying toggling an existing boolean property. Do each operation twice
+        # to make sure that the behaviour is correct when setting the property
+        # to the same value.
+        self.assertTrue(self.fdt2.hasprop(node, prop))
+        self.fdt2.setprop_bool(node, prop, False)
+        self.assertFalse(self.fdt2.hasprop(node, prop))
+        self.fdt2.setprop_bool(node, prop, False)
+        self.assertFalse(self.fdt2.hasprop(node, prop))
+        self.fdt2.setprop_bool(node, prop, True)
+        self.assertTrue(self.fdt2.hasprop(node, prop))
+        self.fdt2.setprop_bool(node, prop, True)
+        self.assertTrue(self.fdt2.hasprop(node, prop))
+
     def testSetName(self):
         """Test that we can update a node name"""
         node = self.fdt.path_offset('/subnode@1')
